@@ -1,0 +1,3 @@
+results/logs/
+results/agents/*/*/transcript.*
+results/agents/*/*/stderr.log

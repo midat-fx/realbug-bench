@@ -1,0 +1,173 @@
+diff --git a/README.md b/README.md
+index f44b665..4941c5f 100644
+--- a/README.md
++++ b/README.md
+@@ -230,6 +230,7 @@ This feature lets you send a message directly to a dead-letter topic by setting
+ 
+ - Dead letter topic resolution order: if `consumer.DeadLetterTopic` is set, it is used; otherwise `retryConfiguration.deadLetterTopic` is used.
+ - You can set `message.ErrDescription` to override the error header value written as `x-error-message`.
++- The flag is also honored while consuming from the retry topic: the message is produced to the dead-letter topic once and is not retried again. If no dead-letter topic is configured, the message follows the normal retry flow.
+ - Set `DeadLetterProducerBatchBytes` to split direct dead-letter ProduceBatch calls by approximate uncompressed message bytes. The default `0` keeps the current single-batch behavior. Configure this below the Kafka/topic max message size to leave room for Kafka protocol and request overhead. A single message larger than the limit is still sent alone and can still fail with Kafka `Message Size Too Large`; adjust DLQ topic/broker limits or payload handling for that case.
+ 
+ Please refer to [Send Direct To Dead Letter Example](examples/with-send-direct-to-deadletter) to run both single and batch scenarios.
+@@ -287,7 +288,7 @@ Please refer to [Send Direct To Dead Letter Example](examples/with-send-direct-t
+ | `batchConfiguration.messageGroupLimit`           | Maximum number of messages in a batch                                                                                                                                                                                                                                                                                                                                                                   | 100                         |
+ | `batchConfiguration.messageGroupByteSizeLimit`   | Maximum number of bytes in a batch                                                                                                                                                                                                                                                                                                                                                                      |                             |
+ | `batchConfiguration.batchConsumeFn`              | Kafka batch consumer function, if retry enabled it, is also used to consume retriable messages                                                                                                                                                                                                                                                                                                          |                             |
+-| `batchConfiguration.preBatchFn`                  | This function enable for transforming messages before batch consuming starts                                                                                                                                                                                                                                                                                                                            |                             |
++| `batchConfiguration.preBatchFn`                  | This function enable for transforming messages before batch consuming starts. If retry enabled, it is also called for each retried message (one message at a time, concurrently with the main flow), so it must be idempotent and safe for concurrent use                                                                                                                                              |                             |
+ | `batchConfiguration.balancer`                    | [see doc](https://pkg.go.dev/github.com/segmentio/kafka-go#Balancer)                                                                                                                                                                                                                                                                                                                                    | leastBytes                  |
+ | `tls.rootCAPath`                                 | [see doc](https://pkg.go.dev/crypto/tls#Config.RootCAs)                                                                                                                                                                                                                                                                                                                                                 | ""                          |
+ | `tls.intermediateCAPath`                         | Same with rootCA, if you want to specify two rootca you can use it with rootCAPath                                                                                                                                                                                                                                                                                                                      | ""                          |
+diff --git a/batch_consumer.go b/batch_consumer.go
+index ace2a2d..8026b7f 100644
+--- a/batch_consumer.go
++++ b/batch_consumer.go
+@@ -63,11 +63,43 @@ func newBatchConsumer(cfg *ConsumerConfig) (Consumer, error) {
+ func (b *batchConsumer) runKonsumerFn(message kcronsumer.Message) error {
+ 	msgList := []*Message{toMessage(message)}
+ 
+-	err := b.consumeFn(msgList)
+-	if msgList[0].ErrDescription != "" {
+-		err = errors.New(msgList[0].ErrDescription)
++	if b.preBatchFn != nil {
++		// BatchConsumeFn relies on PreBatch output (e.g. WriterData) on the retry path as well
++		if msgList = b.preBatchFn(msgList); len(msgList) == 0 {
++			return nil
++		}
+ 	}
+-	return err
++
++	consumeErr := b.consumeFn(msgList)
++
++	var retryErr, deadLetterErr error
++	deadLetterMessages := make([]Message, 0, len(msgList))
++	for _, msg := range msgList {
++		msgErr := consumeErr
++		if msg.ErrDescription != "" {
++			msgErr = errors.New(msg.ErrDescription)
++		}
++		if msgErr == nil {
++			continue
++		}
++
++		// Without a dead letter producer, message follows the normal retry flow
++		if msg.SendDirectToDeadLetter && b.deadLetterProducer != nil {
++			deadLetterErr = msgErr
++			deadLetterMessages = append(deadLetterMessages, msg.toDeadLetterMessage(msgErr))
++		} else if retryErr == nil {
++			retryErr = msgErr
++		}
++	}
++
++	if len(deadLetterMessages) > 0 {
++		if err := b.sendToDeadLetterWithBackoff(deadLetterMessages...); err != nil {
++			b.logger.Errorf("Error producing retried messages to dead letter topic, messages will be retried. Error: %s", err.Error())
++			return deadLetterErr
++		}
++	}
++
++	return retryErr
+ }
+ 
+ func (b *batchConsumer) GetMetricCollectors() []prometheus.Collector {
+@@ -258,12 +290,7 @@ func (b *batchConsumer) process(chunkMessages []*Message) {
+ 
+ 		for _, msg := range chunkMessages {
+ 			if msg.SendDirectToDeadLetter {
+-				msg.AddHeader(Header{
+-					Key:   errMessageKey,
+-					Value: []byte(getErrorMessage(consumeErr, msg)),
+-				})
+-				msg.Topic = "" // we set on initialize for dead letter producer
+-				deadLetterMessages = append(deadLetterMessages, *msg)
++				deadLetterMessages = append(deadLetterMessages, msg.toDeadLetterMessage(consumeErr))
+ 			} else {
+ 				remainingMessages = append(remainingMessages, msg)
+ 			}
+diff --git a/consumer.go b/consumer.go
+index b24bc12..6be3188 100644
+--- a/consumer.go
++++ b/consumer.go
+@@ -37,9 +37,7 @@ func newSingleConsumer(cfg *ConsumerConfig) (Consumer, error) {
+ 	}
+ 
+ 	if cfg.RetryEnabled {
+-		c.base.setupCronsumer(cfg, func(message kcronsumer.Message) error {
+-			return c.consumeFn(toMessage(message))
+-		})
++		c.base.setupCronsumer(cfg, c.runKonsumerFn)
+ 	}
+ 
+ 	if cfg.APIEnabled {
+@@ -49,6 +47,23 @@ func newSingleConsumer(cfg *ConsumerConfig) (Consumer, error) {
+ 	return &c, nil
+ }
+ 
++func (c *consumer) runKonsumerFn(message kcronsumer.Message) error {
++	msg := toMessage(message)
++
++	consumeErr := c.consumeFn(msg)
++	// Without a dead letter producer, message follows the normal retry flow
++	if consumeErr == nil || !msg.SendDirectToDeadLetter || c.deadLetterProducer == nil {
++		return consumeErr
++	}
++
++	if err := c.sendToDeadLetterWithBackoff(msg.toDeadLetterMessage(consumeErr)); err != nil {
++		c.logger.Errorf("Error producing retried message to dead letter topic, message will be retried. Error: %s", err.Error())
++		return consumeErr
++	}
++
++	return nil
++}
++
+ func (c *consumer) GetMetricCollectors() []prometheus.Collector {
+ 	return c.base.GetMetricCollectors()
+ }
+@@ -162,12 +177,7 @@ func (c *consumer) process(message *Message) {
+ 
+ 	if consumeErr != nil {
+ 		if message.SendDirectToDeadLetter {
+-			message.AddHeader(Header{
+-				Key:   errMessageKey,
+-				Value: []byte(getErrorMessage(consumeErr, message)),
+-			})
+-			message.Topic = "" // we set on initialize for dead letter producer
+-			if err := c.sendToDeadLetterWithBackoff(*message); err != nil {
++			if err := c.sendToDeadLetterWithBackoff(message.toDeadLetterMessage(consumeErr)); err != nil {
+ 				errorMessage := fmt.Sprintf(
+ 					"Error producing message %s to dead letter topic. Error: %s",
+ 					string(message.Value), err.Error())
+diff --git a/examples/with-kafka-batch-consumer-with-prebatch/main.go b/examples/with-kafka-batch-consumer-with-prebatch/main.go
+index d849666..b34f78d 100644
+--- a/examples/with-kafka-batch-consumer-with-prebatch/main.go
++++ b/examples/with-kafka-batch-consumer-with-prebatch/main.go
+@@ -50,6 +50,8 @@ type MessageValue struct {
+ 	KafkaMessage *kafka.Message `json:"-"`
+ }
+ 
++// preBatch is also called for each retried message (one message at a time) before batchConsumeFn,
++// so it must be idempotent and safe for concurrent use.
+ func preBatch(messages []*kafka.Message) []*kafka.Message {
+ 	latestMessageById := getLatestMessageByID(messages)
+ 
+diff --git a/message.go b/message.go
+index 28955f0..c9176fc 100644
+--- a/message.go
++++ b/message.go
+@@ -146,6 +146,15 @@ func (m *Message) toRetryableMessage(retryTopic string, consumeError error) kcro
+ 		Build()
+ }
+ 
++func (m *Message) toDeadLetterMessage(consumeError error) Message {
++	m.AddHeader(Header{
++		Key:   errMessageKey,
++		Value: []byte(getErrorMessage(consumeError, m)),
++	})
++	m.Topic = "" // we set on initialize for dead letter producer
++	return *m
++}
++
+ func toMessage(message kcronsumer.Message) *Message {
+ 	headers := make([]protocol.Header, 0, len(message.Headers))
+ 	for i := range message.Headers {

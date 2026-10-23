@@ -1,0 +1,30 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..9a1e238 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -91,6 +91,10 @@ func (cfg ReaderConfig) JSON() string {
+ }
+ 
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
++	if len(cfg.Brokers) == 1 {
++		cfg.Brokers = []string{strings.TrimSpace(cfg.Brokers[0])}
++		return
++	}
+ 	for i := range cfg.Brokers {
+ 		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..218071e 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -38,6 +38,10 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
++	if len(cfg.Brokers) == 1 {
++		cfg.Brokers = []string{strings.TrimSpace(cfg.Brokers[0])}
++		return
++	}
+ 	for i := range cfg.Brokers {
+ 		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}

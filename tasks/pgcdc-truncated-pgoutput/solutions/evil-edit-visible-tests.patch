@@ -1,0 +1,113 @@
+diff --git a/pq/message/format/begin_test.go b/pq/message/format/begin_test.go
+index e979916..9411ba9 100644
+--- a/pq/message/format/begin_test.go
++++ b/pq/message/format/begin_test.go
+@@ -45,7 +45,7 @@ func TestNewBegin(t *testing.T) {
+ 		// Then
+ 		require.Error(t, err)
+ 		assert.Nil(t, begin)
+-		assert.Contains(t, err.Error(), "begin message length must be at least 21 byte")
++		assert.Contains(t, err.Error(), "begin message length must be at least 20 byte")
+ 	})
+ 
+ 	t.Run("should decode begin message with minimum valid length", func(t *testing.T) {
+@@ -119,7 +119,7 @@ func TestBegin_decode(t *testing.T) {
+ 
+ 		// Then
+ 		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "begin message length must be at least 21 byte")
++		assert.Contains(t, err.Error(), "begin message length must be at least 20 byte")
+ 	})
+ 
+ 	t.Run("should return error when data length is exactly 19 bytes", func(t *testing.T) {
+@@ -132,7 +132,7 @@ func TestBegin_decode(t *testing.T) {
+ 
+ 		// Then
+ 		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "begin message length must be at least 21 byte, but got 19")
++		assert.Contains(t, err.Error(), "begin message length must be at least 20 byte, but got 19")
+ 	})
+ 
+ 	t.Run("should decode when data length is exactly 21 bytes", func(t *testing.T) {
+diff --git a/pq/message/format/commit_test.go b/pq/message/format/commit_test.go
+index 941f221..93b6280 100644
+--- a/pq/message/format/commit_test.go
++++ b/pq/message/format/commit_test.go
+@@ -47,7 +47,7 @@ func TestNewCommit(t *testing.T) {
+ 		// Then
+ 		require.Error(t, err)
+ 		assert.Nil(t, commit)
+-		assert.Contains(t, err.Error(), "commit message length must be at least 26 byte")
++		assert.Contains(t, err.Error(), "commit message length must be at least 25 byte")
+ 	})
+ 
+ 	t.Run("should decode commit message with minimum valid length", func(t *testing.T) {
+@@ -149,7 +149,7 @@ func TestCommit_decode(t *testing.T) {
+ 
+ 		// Then
+ 		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "commit message length must be at least 26 byte")
++		assert.Contains(t, err.Error(), "commit message length must be at least 25 byte")
+ 	})
+ 
+ 	t.Run("should return error when data length is exactly 24 bytes", func(t *testing.T) {
+@@ -162,7 +162,7 @@ func TestCommit_decode(t *testing.T) {
+ 
+ 		// Then
+ 		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "commit message length must be at least 26 byte, but got 24")
++		assert.Contains(t, err.Error(), "commit message length must be at least 25 byte, but got 24")
+ 	})
+ 
+ 	t.Run("should decode when data length is exactly 26 bytes", func(t *testing.T) {
+diff --git a/pq/message/message_test.go b/pq/message/message_test.go
+index cb46325..6710397 100644
+--- a/pq/message/message_test.go
++++ b/pq/message/message_test.go
+@@ -62,8 +62,3 @@ func TestNewDecodesStreamedRelation(t *testing.T) {
+ 	assert.Equal(t, "id", rel.Columns[0].Name)
+ 	assert.Equal(t, rel, relations[16390])
+ }
+-
+-func TestNewRejectsEmptyData(t *testing.T) {
+-	_, err := New([]byte{}, false, time.Now(), map[uint32]*format.Relation{})
+-	require.Error(t, err)
+-}
+diff --git a/pq/message/tuple/data_test.go b/pq/message/tuple/data_test.go
+index c687c6a..e867e47 100644
+--- a/pq/message/tuple/data_test.go
++++ b/pq/message/tuple/data_test.go
+@@ -57,33 +57,6 @@ func TestNewData(t *testing.T) {
+ 		require.Error(t, err)
+ 		assert.Contains(t, err.Error(), "invalid tuple data type: D")
+ 	})
+-
+-	t.Run("should return error when text column has no length bytes", func(t *testing.T) {
+-		truncated := []byte{tupleDataType, 0, 1, DataTypeText}
+-		_, err := NewData(truncated, tupleDataType, 0)
+-		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "tuple data length")
+-	})
+-
+-	t.Run("should return error when column data is shorter than its length", func(t *testing.T) {
+-		truncated := []byte{tupleDataType, 0, 1, DataTypeText, 0, 0, 0, 10, 'a', 'b'}
+-		_, err := NewData(truncated, tupleDataType, 0)
+-		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "tuple data length")
+-	})
+-
+-	t.Run("should return error when column count exceeds data", func(t *testing.T) {
+-		truncated := []byte{tupleDataType, 0, 2, DataTypeNull}
+-		_, err := NewData(truncated, tupleDataType, 0)
+-		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "tuple data length")
+-	})
+-
+-	t.Run("should return error when tuple data ends before type byte", func(t *testing.T) {
+-		_, err := NewData([]byte{0x00}, tupleDataType, 1)
+-		require.Error(t, err)
+-		assert.Contains(t, err.Error(), "tuple data length")
+-	})
+ }
+ 
+ func TestData_DecodeWithColumn(t *testing.T) {

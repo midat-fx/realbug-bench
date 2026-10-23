@@ -1,0 +1,42 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..30fddc2 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -5,6 +5,7 @@ import (
+ 	"encoding/json"
+ 	"fmt"
+ 	"regexp"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+@@ -296,6 +297,8 @@ func (cfg *ConsumerConfig) newKafkaReader(logger LoggerInterface) (Reader, error
+ 		return nil, err
+ 	}
+ 
++	// the caller may share this slice with a running reader: normalize a private copy
++	cfg.Reader.Brokers = slices.Clone(cfg.Reader.Brokers)
+ 	cfg.Reader.removeSpaceBrokerList()
+ 
+ 	readerCfg := kafka.ReaderConfig(cfg.Reader)
+diff --git a/producer.go b/producer.go
+index 57803e9..6bcae03 100644
+--- a/producer.go
++++ b/producer.go
+@@ -2,6 +2,7 @@ package kafka
+ 
+ import (
+ 	"context"
++	"slices"
+ 
+ 	"github.com/segmentio/kafka-go"
+ )
+@@ -23,6 +24,8 @@ type producer struct {
+ }
+ 
+ func NewProducer(cfg *ProducerConfig, interceptors ...ProducerInterceptor) (Producer, error) {
++	// the caller may share this slice with a running reader: normalize a private copy
++	cfg.Writer.Brokers = slices.Clone(cfg.Writer.Brokers)
+ 	cfg.Writer.removeSpaceBrokerList()
+ 	kafkaWriter := &kafka.Writer{
+ 		Addr:                   kafka.TCP(cfg.Writer.Brokers...),

@@ -1,0 +1,29 @@
+diff --git a/batch_consumer.go b/batch_consumer.go
+index ace2a2d..5b6376c 100644
+--- a/batch_consumer.go
++++ b/batch_consumer.go
+@@ -62,11 +62,24 @@ func newBatchConsumer(cfg *ConsumerConfig) (Consumer, error) {
+ 
+ func (b *batchConsumer) runKonsumerFn(message kcronsumer.Message) error {
+ 	msgList := []*Message{toMessage(message)}
++	if b.preBatchFn != nil {
++		if msgList = b.preBatchFn(msgList); len(msgList) == 0 {
++			return nil
++		}
++	}
+ 
+ 	err := b.consumeFn(msgList)
+ 	if msgList[0].ErrDescription != "" {
+ 		err = errors.New(msgList[0].ErrDescription)
+ 	}
++	if err != nil && err.Error() == "schema mismatch" && b.deadLetterProducer != nil {
++		m := msgList[0]
++		m.AddHeader(Header{Key: errMessageKey, Value: []byte(err.Error())})
++		m.Topic = ""
++		if dlqErr := b.sendToDeadLetterWithBackoff(*m); dlqErr == nil {
++			return nil
++		}
++	}
+ 	return err
+ }
+ 

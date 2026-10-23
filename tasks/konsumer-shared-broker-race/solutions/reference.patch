@@ -1,0 +1,38 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..ebf3cc0 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -90,10 +90,13 @@ func (cfg ReaderConfig) JSON() string {
+ 		cfg.MaxWait, cfg.CommitInterval, kcronsumer.ToStringOffset(cfg.StartOffset))
+ }
+ 
++// removeSpaceBrokerList does not write into the given slice, it can be shared with a running reader
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
++	brokers := make([]string, len(cfg.Brokers))
+ 	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++		brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}
++	cfg.Brokers = brokers
+ }
+ 
+ func (cfg *ConsumerConfig) JSON() string {
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..674ffe4 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -37,10 +37,13 @@ func (cfg WriterConfig) JSON() string {
+ 		strings.Join(cfg.Brokers, "\", \""), GetBalancerString(cfg.Balancer), cfg.Compression.String())
+ }
+ 
++// removeSpaceBrokerList does not write into the given slice, it can be shared with a running reader
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
++	brokers := make([]string, len(cfg.Brokers))
+ 	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++		brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}
++	cfg.Brokers = brokers
+ }
+ 
+ type TransportConfig struct {

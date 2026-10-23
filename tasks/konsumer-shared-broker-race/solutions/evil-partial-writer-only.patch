@@ -1,0 +1,17 @@
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..7f3926c 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -38,9 +38,11 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
++	brokers := make([]string, len(cfg.Brokers))
+ 	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++		brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}
++	cfg.Brokers = brokers
+ }
+ 
+ type TransportConfig struct {

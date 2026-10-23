@@ -1,0 +1,41 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..275c280 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -91,6 +91,8 @@ func (cfg ReaderConfig) JSON() string {
+ }
+ 
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
++	brokerListMu.Lock()
++	defer brokerListMu.Unlock()
+ 	for i := range cfg.Brokers {
+ 		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..d6ed021 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -4,6 +4,7 @@ import (
+ 	"fmt"
+ 	"regexp"
+ 	"strings"
++	"sync"
+ 	"time"
+ 
+ 	"go.opentelemetry.io/otel"
+@@ -38,11 +39,15 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
++	brokerListMu.Lock()
++	defer brokerListMu.Unlock()
+ 	for i := range cfg.Brokers {
+ 		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+ 	}
+ }
+ 
++var brokerListMu sync.Mutex
++
+ type TransportConfig struct {
+ 	MetadataTopics []string
+ 	DialTimeout    time.Duration

@@ -1,0 +1,18 @@
+diff --git a/pq/message/message.go b/pq/message/message.go
+index 180bac9..59ffbf9 100644
+--- a/pq/message/message.go
++++ b/pq/message/message.go
+@@ -39,7 +39,12 @@ type Type uint8
+ // XID prefix. The caller owns that state (it flips on the StreamStart/StreamStop/
+ // StreamCommit/StreamAbort messages this function returns) — it must NOT be
+ // process-global, since one process may run several replication streams.
+-func New(data []byte, streamedTransaction bool, serverTime time.Time, relation map[uint32]*format.Relation) (any, error) {
++func New(data []byte, streamedTransaction bool, serverTime time.Time, relation map[uint32]*format.Relation) (msg any, err error) {
++	defer func() {
++		if r := recover(); r != nil {
++			msg, err = nil, errors.Newf("malformed message: %v", r)
++		}
++	}()
+ 	switch Type(data[0]) {
+ 	case BeginByte:
+ 		return format.NewBegin(data)

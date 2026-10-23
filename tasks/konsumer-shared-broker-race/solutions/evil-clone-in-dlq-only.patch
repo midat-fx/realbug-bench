@@ -1,0 +1,13 @@
+diff --git a/consumer_base.go b/consumer_base.go
+index 68b3f9a..089ddcd 100644
+--- a/consumer_base.go
++++ b/consumer_base.go
+@@ -296,7 +296,7 @@ func initializeDeadLetterProducer(cfg *ConsumerConfig) (Producer, error) {
+ 	deadLetterProducer, err := NewProducer(&ProducerConfig{
+ 		Writer: WriterConfig{
+ 			Topic:                  deadLetterTopic,
+-			Brokers:                cfg.Reader.Brokers,
++			Brokers:                append([]string(nil), cfg.Reader.Brokers...),
+ 			AllowAutoTopicCreation: true,
+ 			RequiredAcks:           cfg.RetryConfiguration.ProducerRequiredAcks,
+ 			Compression:            cfg.RetryConfiguration.ProducerCompression,

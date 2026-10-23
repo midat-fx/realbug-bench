@@ -1,0 +1,35 @@
+package kafka
+
+import (
+	"testing"
+	"time"
+
+	"github.com/segmentio/kafka-go"
+)
+
+// Run with -race: the reader's group coordinator discovery reads the broker list in the background.
+func Test_initializeDeadLetterProducer_does_not_write_reader_brokers(t *testing.T) {
+	cfg := ConsumerConfig{
+		DeadLetterTopic: "dead-letter-topic",
+		Reader: ReaderConfig{
+			Brokers: []string{" 127.0.0.1:1 "},
+			GroupID: "group-id",
+			Topic:   "topic",
+			Dialer:  &kafka.Dialer{Timeout: 10 * time.Millisecond},
+		},
+	}
+
+	reader := kafka.NewReader(kafka.ReaderConfig(cfg.Reader))
+	defer reader.Close()
+	time.Sleep(20 * time.Millisecond)
+
+	producer, err := initializeDeadLetterProducer(&cfg)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	defer producer.Close()
+
+	if cfg.Reader.Brokers[0] != " 127.0.0.1:1 " {
+		t.Errorf("reader broker list must be untouched, got %q", cfg.Reader.Brokers[0])
+	}
+}

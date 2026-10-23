@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# realbug-bench driver.
+#
+#   ./bench check [task...]           grade every solution of every task, compare with the expected verdict
+#   ./bench verify <task> <patch>     grade one patch, print the verdict
+#   ./bench workspace <task> <dir>    create the agent workspace: upstream at the base commit + visible tests
+#   ./bench agent <task> <agent>      run a coding agent (claude|codex) on a task, grade its diff
+#   ./bench build <task>              build the task image
+#
+# Expected verdicts come from file names: reference.patch and ok-*.patch must PASS, evil-*.patch must FAIL.
+# RUNS (default 2) repeats the whole check to catch flaky verdicts.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")" && pwd)
+RUNS="${RUNS:-2}"
+DOCKER_RUN_FLAGS=(--rm --network none --cpus "${GRADE_CPUS:-2}" --memory "${GRADE_MEMORY:-4g}")
+
+die() { echo "error: $*" >&2; exit 2; }
+task_dir() { [ -f "$ROOT/tasks/$1/task.env" ] || die "unknown task $1"; echo "$ROOT/tasks/$1"; }
+image() { echo "realbug-bench/$1:latest"; }
+all_tasks() { for d in "$ROOT"/tasks/*/task.env; do basename "$(dirname "$d")"; done; }
+
+build() {
+	local dir; dir=$(task_dir "$1")
+	docker build -q -t "$(image "$1")" "$dir" >/dev/null
+}
+
+# verify <task> <patch> [log]  -> prints "PASS <layer>" / "FAIL <layer>"
+verify() {
+	local task=$1 patch=$2 log=${3:-/dev/stderr} dir out
+	dir=$(task_dir "$task")
+	patch=$(cd "$(dirname "$patch")" && pwd)/$(basename "$patch")
+	out=$(docker run "${DOCKER_RUN_FLAGS[@]}" \
+		-v "$patch:/in/candidate.patch:ro" \
+		-v "$dir/task.env:/task/task.env:ro" \
+		-v "$dir/tests:/task/tests:ro" \
+		-v "$ROOT/harness/grade.sh:/grade.sh:ro" \
+		"$(image "$task")" bash /grade.sh 2>&1) || true
+	printf '%s\n' "$out" >"$log"
+	local line; line=$(grep '^VERDICT ' <<<"$out" | tail -1)
+	[ -n "$line" ] || { echo "ERROR no-verdict"; return; }
+	echo "${line#VERDICT }"
+}
+
+expected() {
+	case "$(basename "$1")" in
+	reference.patch | ok-*.patch) echo PASS ;;
+	evil-*.patch) echo FAIL ;;
+	*) die "cannot infer expected verdict for $1" ;;
+	esac
+}
+
+check() {
+	local tasks=("$@") failed=0 task
+	# shellcheck disable=SC2207
+	[ $# -gt 0 ] || tasks=($(all_tasks))
+	mkdir -p "$ROOT/results/logs"
+	for task in "${tasks[@]}"; do
+		echo "### $task"
+		build "$task"
+		for patch in "$(task_dir "$task")"/solutions/*.patch; do
+			local name want verdicts=() v
+			name=$(basename "$patch" .patch)
+			want=$(expected "$patch")
+			for run in $(seq 1 "$RUNS"); do
+				v=$(verify "$task" "$patch" "$ROOT/results/logs/$task.$name.run$run.log")
+				verdicts+=("$v")
+			done
+			local first=${verdicts[0]} status=ok
+			for v in "${verdicts[@]}"; do [ "${v%% *}" = "${first%% *}" ] || status=FLAKY; done
+			[ "$status" = ok ] && [ "${first%% *}" != "$want" ] && status=WRONG
+			[ "$status" = ok ] || failed=1
+			printf '  %-36s expect %-4s got %-28s [%s]\n' "$name" "$want" "$(IFS=,; echo "${verdicts[*]}")" "$status"
+		done
+	done
+	return $failed
+}
+
+workspace() {
+	local task=$1 ws=$2 dir
+	dir=$(task_dir "$task")
+	# shellcheck disable=SC1091
+	(source "$dir/task.env"
+		[ ! -e "$ws" ] || die "$ws already exists"
+		git clone --quiet "$UPSTREAM" "$ws"
+		git -C "$ws" checkout --quiet -B task "$BASE_COMMIT"
+		git -C "$ws" remote remove origin
+		cp -R "$dir/tests/visible/." "$ws/"
+		git -C "$ws" add -A
+		git -C "$ws" -c user.email=bench@local -c user.name=bench commit --quiet -m "visible tests")
+}
+
+# Diff of everything the agent changed, including new files, against the workspace commit.
+workspace_diff() {
+	git -C "$1" add -A
+	git -C "$1" diff --cached --binary HEAD
+}
+
+agent() {
+	local task=$1 who=$2 dir stamp ws out model
+	case "$who" in claude) model=${CLAUDE_MODEL:-claude-opus-5-5} ;; codex) model=${CODEX_MODEL:-} ;; esac
+	dir=$(task_dir "$task")
+	stamp=$(date -u +%Y%m%dT%H%M%SZ)
+	out="$ROOT/results/agents/$task/$who-$stamp"
+	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}/realbug-$task-$who-$stamp"
+	mkdir -p "$out"
+	workspace "$task" "$ws"
+	local prompt
+	prompt="You are working in a $(. "$dir/task.env"; echo "$LANGUAGE" | sed 's/^go$/Go/;s/^cpp$/C++/;s/^python$/Python/') repository. Resolve the following GitHub issue by changing the code.
+Do not modify existing tests to make them pass. Visible tests are in the repository; hidden tests will also be run.
+
+$(cat "$dir/issue.md")"
+	local start end rc=0
+	start=$(date +%s)
+	case "$who" in
+	claude)
+		# project-only settings, no MCP servers, no skills: the agent sees the workspace and the issue only
+		(cd "$ws" && claude -p "$prompt" --model "$model" --permission-mode bypassPermissions \
+			--setting-sources project --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
+			--disable-slash-commands --no-session-persistence \
+			--output-format stream-json --verbose >"$out/transcript.jsonl" 2>"$out/stderr.log") || rc=$?
+		;;
+	codex)
+		# no sandbox: the Go toolchain needs its build cache outside the workspace (same latitude as claude above)
+		(cd "$ws" && "${CODEX_BIN:-codex}" exec ${model:+-m "$model"} --dangerously-bypass-approvals-and-sandbox \
+			--skip-git-repo-check --json "$prompt" >"$out/transcript.jsonl" 2>"$out/stderr.log") || rc=$?
+		;;
+	*) die "unknown agent $who" ;;
+	esac
+	end=$(date +%s)
+	workspace_diff "$ws" >"$out/candidate.patch"
+	build "$task"
+	local verdict
+	verdict=$(verify "$task" "$out/candidate.patch" "$out/grade.log")
+	# contamination check: the agent must not have read this repository (hidden tests, solutions)
+	if grep -q "realbug-bench/tasks" "$out"/transcript.* 2>/dev/null; then verdict="$verdict (CONTAMINATED)"; fi
+	printf '{"task":"%s","agent":"%s","model":"%s","started":"%s","seconds":%d,"agent_exit":%d,"verdict":"%s"}\n' \
+		"$task" "$who" "${model:-default}" "$stamp" $((end - start)) "$rc" "$verdict" | tee "$out/result.json"
+}
+
+cmd=${1:-}
+shift || true
+case "$cmd" in
+check) check "$@" ;;
+verify) [ $# -eq 2 ] || die "usage: bench verify <task> <patch>"; build "$1"; verify "$1" "$2" ;;
+workspace) [ $# -eq 2 ] || die "usage: bench workspace <task> <dir>"; workspace "$1" "$2" ;;
+agent) [ $# -eq 2 ] || die "usage: bench agent <task> <claude|codex>"; agent "$1" "$2" ;;
+build) build "$1" ;;
+*) sed -n '2,11p' "$0"; exit 2 ;;
+esac

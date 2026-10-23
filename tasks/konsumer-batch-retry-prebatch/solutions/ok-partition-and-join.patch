@@ -1,0 +1,63 @@
+diff --git a/batch_consumer.go b/batch_consumer.go
+index ace2a2d..1f10f6c 100644
+--- a/batch_consumer.go
++++ b/batch_consumer.go
+@@ -60,14 +60,53 @@ func newBatchConsumer(cfg *ConsumerConfig) (Consumer, error) {
+ 	return &c, nil
+ }
+ 
++// runKonsumerFn is the cronsumer callback for messages read back from the retry topic.
++// It goes through the same PreBatchFn -> BatchConsumeFn pipeline as the main flow and
++// dead-letters messages flagged with SendDirectToDeadLetter instead of retrying them.
+ func (b *batchConsumer) runKonsumerFn(message kcronsumer.Message) error {
+-	msgList := []*Message{toMessage(message)}
++	batch := []*Message{toMessage(message)}
++	if b.preBatchFn != nil {
++		batch = b.preBatchFn(batch)
++	}
++	if len(batch) == 0 {
++		return nil
++	}
++
++	consumeErr := b.consumeFn(batch)
++
++	var toRetry []error
++	var toDeadLetter []*Message
++	for _, msg := range batch {
++		failure := consumeErr
++		if msg.ErrDescription != "" {
++			failure = errors.New(msg.ErrDescription)
++		}
++		switch {
++		case failure == nil:
++		case msg.SendDirectToDeadLetter && b.base != nil && b.deadLetterProducer != nil:
++			toDeadLetter = append(toDeadLetter, msg)
++		default:
++			toRetry = append(toRetry, failure)
++		}
++	}
+ 
+-	err := b.consumeFn(msgList)
+-	if msgList[0].ErrDescription != "" {
+-		err = errors.New(msgList[0].ErrDescription)
++	if len(toDeadLetter) > 0 {
++		out := make([]Message, 0, len(toDeadLetter))
++		for _, msg := range toDeadLetter {
++			msg.AddHeader(Header{Key: errMessageKey, Value: []byte(getErrorMessage(consumeErr, msg))})
++			dl := *msg
++			dl.Topic = "" // the dead letter producer is bound to its topic
++			out = append(out, dl)
++		}
++		if err := b.sendToDeadLetterWithBackoff(out...); err != nil {
++			b.logger.Errorf("Retried messages could not be dead-lettered, they will be retried again: %s", err.Error())
++			for _, msg := range toDeadLetter {
++				toRetry = append(toRetry, errors.New(getErrorMessage(consumeErr, msg)))
++			}
++		}
+ 	}
+-	return err
++
++	return errors.Join(toRetry...)
+ }
+ 
+ func (b *batchConsumer) GetMetricCollectors() []prometheus.Collector {

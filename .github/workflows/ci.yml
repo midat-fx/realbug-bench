@@ -1,0 +1,34 @@
+name: bench
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n bench harness/grade.sh
+      - run: shellcheck -S warning bench harness/grade.sh
+
+  tasks:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 2 # at most two image builds at a time
+      matrix:
+        task:
+          - pgcdc-truncated-pgoutput
+          - konsumer-batch-retry-prebatch
+          - konsumer-shared-broker-race
+    steps:
+      - uses: actions/checkout@v4
+      # every solution is graded twice: a verdict that changes between runs fails the job as FLAKY
+      - run: RUNS=2 ./bench check ${{ matrix.task }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.task }}
+          path: results/logs/

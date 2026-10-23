@@ -1,0 +1,294 @@
+diff --git a/pq/message/format/begin.go b/pq/message/format/begin.go
+index 0ce7a03..fb3a52e 100644
+--- a/pq/message/format/begin.go
++++ b/pq/message/format/begin.go
+@@ -25,8 +25,8 @@ func NewBegin(data []byte) (*Begin, error) {
+ func (b *Begin) decode(data []byte) error {
+ 	skipByte := 1
+ 
+-	if len(data) < 20 {
+-		return errors.Newf("begin message length must be at least 20 byte, but got %d", len(data))
++	if len(data) < 21 {
++		return errors.Newf("begin message length must be at least 21 byte, but got %d", len(data))
+ 	}
+ 
+ 	b.FinalLSN = pq.LSN(binary.BigEndian.Uint64(data[skipByte:]))
+diff --git a/pq/message/format/commit.go b/pq/message/format/commit.go
+index 7d03140..bb306bb 100644
+--- a/pq/message/format/commit.go
++++ b/pq/message/format/commit.go
+@@ -26,8 +26,8 @@ func NewCommit(data []byte) (*Commit, error) {
+ func (c *Commit) decode(data []byte) error {
+ 	skipByte := 1
+ 
+-	if len(data) < 25 {
+-		return errors.Newf("commit message length must be at least 25 byte, but got %d", len(data))
++	if len(data) < 26 {
++		return errors.Newf("commit message length must be at least 26 byte, but got %d", len(data))
+ 	}
+ 
+ 	c.Flags = data[skipByte]
+diff --git a/pq/message/format/relation.go b/pq/message/format/relation.go
+index 4d3307a..a6ac46d 100644
+--- a/pq/message/format/relation.go
++++ b/pq/message/format/relation.go
+@@ -46,44 +46,37 @@ func (m *Relation) decode(data []byte, streamedTransaction bool) error {
+ 	m.OID = binary.BigEndian.Uint32(data[skipByte:])
+ 	skipByte += 4
+ 
+-	var usedByteCount int
+-	m.Namespace, usedByteCount = decodeString(data[skipByte:])
+-	if usedByteCount < 0 {
+-		return errors.New("relation message namespace decode error")
++	c := tuple.NewCursor(data, skipByte)
++	var err error
++	if m.Namespace, err = c.CString(); err != nil {
++		return errors.Wrap(err, "relation message namespace")
+ 	}
+-	skipByte += usedByteCount
+-
+-	m.Name, usedByteCount = decodeString(data[skipByte:])
+-	if usedByteCount < 0 {
+-		return errors.New("relation message namespace decode error")
++	if m.Name, err = c.CString(); err != nil {
++		return errors.Wrap(err, "relation message name")
++	}
++	if m.ReplicaID, err = c.Uint8(); err != nil {
++		return errors.Wrap(err, "relation message replica identity")
++	}
++	if m.ColumnNumbers, err = c.Uint16(); err != nil {
++		return errors.Wrap(err, "relation message column count")
+ 	}
+-	skipByte += usedByteCount
+-
+-	m.ReplicaID = data[skipByte]
+-	skipByte++
+-
+-	m.ColumnNumbers = binary.BigEndian.Uint16(data[skipByte:])
+-	skipByte += 2
+ 
+-	m.Columns = make([]tuple.RelationColumn, m.ColumnNumbers)
+-	for i := range m.Columns {
++	m.Columns = make([]tuple.RelationColumn, 0, min(int(m.ColumnNumbers), len(data)))
++	for i := 0; i < int(m.ColumnNumbers); i++ {
+ 		col := tuple.RelationColumn{}
+-		col.Flags = data[skipByte]
+-		skipByte++
+-
+-		col.Name, usedByteCount = decodeString(data[skipByte:])
+-		if usedByteCount < 0 {
+-			return errors.Newf("relation message columns[%d].name decode error", i)
++		if col.Flags, err = c.Uint8(); err != nil {
++			return errors.Wrapf(err, "relation message columns[%d].flags", i)
+ 		}
+-		skipByte += usedByteCount
+-
+-		col.DataType = binary.BigEndian.Uint32(data[skipByte:])
+-		skipByte += 4
+-
+-		col.TypeModifier = binary.BigEndian.Uint32(data[skipByte:])
+-		skipByte += 4
+-
+-		m.Columns[i] = col
++		if col.Name, err = c.CString(); err != nil {
++			return errors.Wrapf(err, "relation message columns[%d].name", i)
++		}
++		if col.DataType, err = c.Uint32(); err != nil {
++			return errors.Wrapf(err, "relation message columns[%d].type", i)
++		}
++		if col.TypeModifier, err = c.Uint32(); err != nil {
++			return errors.Wrapf(err, "relation message columns[%d].typmod", i)
++		}
++		m.Columns = append(m.Columns, col)
+ 	}
+ 
+ 	return nil
+diff --git a/pq/message/format/update.go b/pq/message/format/update.go
+index 317fc51..10734db 100644
+--- a/pq/message/format/update.go
++++ b/pq/message/format/update.go
+@@ -101,6 +101,9 @@ func (m *Update) decode(data []byte, streamedTransaction bool) error {
+ 
+ 		if m.OldTupleData != nil {
+ 			for i, col := range m.NewTupleData.Columns {
++				if i >= len(m.OldTupleData.Columns) {
++					break
++				}
+ 				// because toasted columns not sent until the toasted column updated
+ 				if col.DataType == tuple.DataTypeToast {
+ 					m.NewTupleData.Columns[i] = m.OldTupleData.Columns[i]
+diff --git a/pq/message/message.go b/pq/message/message.go
+index 180bac9..f9f5e4d 100644
+--- a/pq/message/message.go
++++ b/pq/message/message.go
+@@ -40,6 +40,9 @@ type Type uint8
+ // StreamCommit/StreamAbort messages this function returns) — it must NOT be
+ // process-global, since one process may run several replication streams.
+ func New(data []byte, streamedTransaction bool, serverTime time.Time, relation map[uint32]*format.Relation) (any, error) {
++	if len(data) < 1 {
++		return nil, errors.New("pgoutput message is empty")
++	}
+ 	switch Type(data[0]) {
+ 	case BeginByte:
+ 		return format.NewBegin(data)
+diff --git a/pq/message/tuple/cursor.go b/pq/message/tuple/cursor.go
+new file mode 100644
+index 0000000..d696c5e
+--- /dev/null
++++ b/pq/message/tuple/cursor.go
+@@ -0,0 +1,67 @@
++package tuple
++
++import (
++	"bytes"
++	"encoding/binary"
++
++	"github.com/go-playground/errors"
++)
++
++// Cursor reads big-endian pgoutput fields and refuses to read past the end of the buffer.
++type Cursor struct {
++	data []byte
++	pos  int
++}
++
++func NewCursor(data []byte, pos int) *Cursor { return &Cursor{data: data, pos: pos} }
++
++func (c *Cursor) Pos() int { return c.pos }
++
++func (c *Cursor) take(n int) ([]byte, error) {
++	if n < 0 || c.pos < 0 || len(c.data)-c.pos < n {
++		return nil, errors.Newf("tuple data length must be at least %d byte, but got %d", c.pos+n, len(c.data))
++	}
++	b := c.data[c.pos : c.pos+n]
++	c.pos += n
++	return b, nil
++}
++
++func (c *Cursor) Uint8() (uint8, error) {
++	b, err := c.take(1)
++	if err != nil {
++		return 0, err
++	}
++	return b[0], nil
++}
++
++func (c *Cursor) Uint16() (uint16, error) {
++	b, err := c.take(2)
++	if err != nil {
++		return 0, err
++	}
++	return binary.BigEndian.Uint16(b), nil
++}
++
++func (c *Cursor) Uint32() (uint32, error) {
++	b, err := c.take(4)
++	if err != nil {
++		return 0, err
++	}
++	return binary.BigEndian.Uint32(b), nil
++}
++
++func (c *Cursor) Bytes(n int) ([]byte, error) { return c.take(n) }
++
++// CString reads a NUL-terminated string.
++func (c *Cursor) CString() (string, error) {
++	if c.pos > len(c.data) {
++		return "", errors.Newf("tuple data length must be at least %d byte, but got %d", c.pos+1, len(c.data))
++	}
++	end := bytes.IndexByte(c.data[c.pos:], 0)
++	if end < 0 {
++		return "", errors.Newf("unterminated string at offset %d", c.pos)
++	}
++	s := string(c.data[c.pos : c.pos+end])
++	c.pos += end + 1
++	return s, nil
++}
+diff --git a/pq/message/tuple/data.go b/pq/message/tuple/data.go
+index c8ec08d..2f7fea0 100644
+--- a/pq/message/tuple/data.go
++++ b/pq/message/tuple/data.go
+@@ -1,8 +1,6 @@
+ package tuple
+ 
+ import (
+-	"encoding/binary"
+-
+ 	"github.com/go-playground/errors"
+ 	"github.com/jackc/pgx/v5/pgtype"
+ )
+@@ -38,41 +36,55 @@ type RelationColumn struct {
+ }
+ 
+ func NewData(data []byte, tupleDataType uint8, skipByteLength int) (*Data, error) {
+-	if data[skipByteLength] != tupleDataType {
+-		return nil, errors.New("invalid tuple data type: " + string(data[skipByteLength]))
++	c := NewCursor(data, skipByteLength)
++	kind, err := c.Uint8()
++	if err != nil {
++		return nil, errors.Wrap(err, "tuple data type")
++	}
++	if kind != tupleDataType {
++		return nil, errors.New("invalid tuple data type: " + string(kind))
+ 	}
+-	skipByteLength++
+ 
+ 	d := &Data{}
+-	d.Decode(data, skipByteLength)
+-
++	if err := d.decode(c); err != nil {
++		return nil, err
++	}
+ 	return d, nil
+ }
+ 
+-func (d *Data) Decode(data []byte, skipByteLength int) {
+-	d.ColumnNumber = binary.BigEndian.Uint16(data[skipByteLength:])
+-	skipByteLength += 2
++func (d *Data) Decode(data []byte, skipByteLength int) error {
++	return d.decode(NewCursor(data, skipByteLength))
++}
++
++func (d *Data) decode(c *Cursor) error {
++	var err error
++	if d.ColumnNumber, err = c.Uint16(); err != nil {
++		return errors.Wrap(err, "tuple column count")
++	}
+ 
+-	for range d.ColumnNumber {
++	for i := 0; i < int(d.ColumnNumber); i++ {
+ 		col := new(DataColumn)
+-		col.DataType = data[skipByteLength]
+-		skipByteLength++
++		if col.DataType, err = c.Uint8(); err != nil {
++			return errors.Wrapf(err, "tuple column %d type", i)
++		}
+ 
+ 		switch col.DataType {
+ 		case DataTypeNull, DataTypeToast:
+ 		case DataTypeText, DataTypeBinary:
+-			col.Length = binary.BigEndian.Uint32(data[skipByteLength:])
+-			skipByteLength += 4
+-
+-			col.Data = make([]byte, int(col.Length))
+-			copy(col.Data, data[skipByteLength:])
+-
+-			skipByteLength += int(col.Length)
++			if col.Length, err = c.Uint32(); err != nil {
++				return errors.Wrapf(err, "tuple column %d length", i)
++			}
++			value, err := c.Bytes(int(col.Length))
++			if err != nil {
++				return errors.Wrapf(err, "tuple column %d value", i)
++			}
++			col.Data = append([]byte(nil), value...)
+ 		}
+ 
+ 		d.Columns = append(d.Columns, col)
+ 	}
+-	d.SkipByte = skipByteLength
++	d.SkipByte = c.Pos()
++	return nil
+ }
+ 
+ func (d *Data) DecodeWithColumn(columns []RelationColumn) (map[string]any, error) {

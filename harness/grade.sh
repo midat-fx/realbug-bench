@@ -3,7 +3,8 @@
 #
 # Mounts (read-only):
 #   /in/candidate.patch   diff against the agent workspace (base commit + visible tests)
-#   /task/task.env        TEST_PKGS, VISIBLE_RUN, REGRESSION_PKGS, REPEAT (hidden tests are named TestHidden*)
+#   /task/task.env        Go: TEST_PKGS, VISIBLE_RUN, REGRESSION_PKGS, REPEAT (hidden tests are named TestHidden*)
+#                         other languages: BUILD_CMD, VISIBLE_CMD, HIDDEN_CMD, REGRESSION_CMD
 #   /task/tests/visible   tests the agent saw
 #   /task/tests/hidden    tests the agent never saw
 #
@@ -51,19 +52,23 @@ if [ -n "$touched" ]; then
 fi
 cp -R /task/tests/hidden/. .
 
+if [ "${LANGUAGE:-go}" = go ]; then
+	BUILD_CMD="go build ./..."
+	VISIBLE_CMD="go test -race -count=$REPEAT -timeout 600s -run '$VISIBLE_RUN' $TEST_PKGS"
+	HIDDEN_CMD="go test -race -count=$REPEAT -timeout 600s -run '^TestHidden' $TEST_PKGS"
+	REGRESSION_CMD="go test -count=1 -timeout 900s $REGRESSION_PKGS"
+fi
+
 echo "== layer 3: build"
-go build ./... || verdict FAIL build
+eval "$BUILD_CMD" || verdict FAIL build
 
-echo "== layer 4: visible tests, race detector, -count=$REPEAT"
-# shellcheck disable=SC2086
-go test -race -count="$REPEAT" -timeout 600s -run "$VISIBLE_RUN" $TEST_PKGS || verdict FAIL visible-tests
+echo "== layer 4: visible tests"
+eval "$VISIBLE_CMD" || verdict FAIL visible-tests
 
-echo "== layer 5: hidden tests, race detector, -count=$REPEAT"
-# shellcheck disable=SC2086
-go test -race -count="$REPEAT" -timeout 600s -run '^TestHidden' $TEST_PKGS || verdict FAIL hidden-tests
+echo "== layer 5: hidden tests"
+eval "$HIDDEN_CMD" || verdict FAIL hidden-tests
 
 echo "== layer 6: upstream regression suite"
-# shellcheck disable=SC2086
-go test -count=1 -timeout 900s $REGRESSION_PKGS || verdict FAIL regression
+eval "$REGRESSION_CMD" || verdict FAIL regression
 
 verdict PASS all-layers

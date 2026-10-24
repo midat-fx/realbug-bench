@@ -24,6 +24,7 @@ jobs:
           - konsumer-batch-retry-prebatch
           - konsumer-shared-broker-race
           - gaos-scenario-races
+          - courier-overlapping-shifts # builds userver from source first
     steps:
       - uses: actions/checkout@v4
       # every solution is graded twice: a verdict that changes between runs fails the job as FLAKY

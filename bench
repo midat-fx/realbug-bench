@@ -8,12 +8,13 @@
 #   ./bench build <task>              build the task image
 #
 # Expected verdicts come from file names: reference.patch and ok-*.patch must PASS, evil-*.patch must FAIL.
+# --hostname localhost: without a network the container hostname does not resolve, and testsuite services bind to it.
 # RUNS (default 2) repeats the whole check to catch flaky verdicts. PRUNE=1 removes each task image after use.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
 RUNS="${RUNS:-2}"
-DOCKER_RUN_FLAGS=(--rm --network none --cpus "${GRADE_CPUS:-2}" --memory "${GRADE_MEMORY:-4g}")
+DOCKER_RUN_FLAGS=(--rm --network none --hostname localhost --cpus "${GRADE_CPUS:-2}" --memory "${GRADE_MEMORY:-4g}")
 
 die() { echo "error: $*" >&2; exit 2; }
 task_dir() { [ -f "$ROOT/tasks/$1/task.env" ] || die "unknown task $1"; echo "$ROOT/tasks/$1"; }
@@ -21,7 +22,12 @@ image() { echo "realbug-bench/$1:latest"; }
 all_tasks() { for d in "$ROOT"/tasks/*/task.env; do basename "$(dirname "$d")"; done; }
 
 build() {
-	local dir; dir=$(task_dir "$1")
+	local dir base; dir=$(task_dir "$1")
+	# A task may build FROM a shared base image (images/<name>), built once and kept by PRUNE.
+	base=$(sed -n 's/^BASE_IMAGE=//p' "$dir/task.env")
+	if [ -n "$base" ] && ! docker image inspect "$base" >/dev/null 2>&1; then
+		docker build -q -t "$base" "$ROOT/images/$(sed -n 's/^BASE_IMAGE_DIR=//p' "$dir/task.env")" >/dev/null
+	fi
 	docker build -q -t "$(image "$1")" "$dir" >/dev/null
 }
 

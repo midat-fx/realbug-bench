@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// From the project's fix (pg-search-sync, gaos b41f2d3). Run with -race.
+// From a local gaos fix (b41f2d3). Run with -race.
 func TestRateIsExactUnderConcurrency(t *testing.T) {
 	rate := NewRate(Scenario{Rate: 1})
 	var ignored int64

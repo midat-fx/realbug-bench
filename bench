@@ -8,7 +8,7 @@
 #   ./bench build <task>              build the task image
 #
 # Expected verdicts come from file names: reference.patch and ok-*.patch must PASS, evil-*.patch must FAIL.
-# RUNS (default 2) repeats the whole check to catch flaky verdicts.
+# RUNS (default 2) repeats the whole check to catch flaky verdicts. PRUNE=1 removes each task image after use.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
@@ -72,6 +72,12 @@ check() {
 			[ "$status" = ok ] || failed=1
 			printf '  %-36s expect %-4s got %-28s [%s]\n' "$name" "$want" "$(IFS=,; echo "${verdicts[*]}")" "$status"
 		done
+		# PRUNE=1: drop the task image and build cache after grading (disk-constrained hosts)
+		if [ "${PRUNE:-0}" = 1 ]; then
+			docker rmi -f "$(image "$task")" >/dev/null
+			docker builder prune -af >/dev/null
+			docker image prune -f >/dev/null
+		fi
 	done
 	return $failed
 }

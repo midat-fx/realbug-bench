@@ -1,0 +1,195 @@
+diff --git a/runner/runner.go b/runner/runner.go
+index 93c1460..fe0b140 100644
+--- a/runner/runner.go
++++ b/runner/runner.go
+@@ -29,6 +29,7 @@ import (
+ 	"os"
+ 	"os/signal"
+ 	"sync"
++	"sync/atomic"
+ 	"syscall"
+ 	"time"
+ )
+@@ -65,7 +66,7 @@ type Runner struct {
+ 	Service  map[string]*Service  `json:"service"`
+ 	Scenario map[string]*Scenario `json:"scenario"`
+ 	servers  []*fasthttp.Server
+-	Metrics Metrics
++	Metrics  Metrics
+ }
+ 
+ type Metrics struct {
+@@ -122,6 +123,14 @@ type Scenario struct {
+ type Method struct {
+ 	Scenario
+ 	runner *Runner
++	// scenarioMu guards Scenario: a "direct" action replaces it while other requests run.
++	scenarioMu sync.RWMutex
++}
++
++func (m *Method) current() Scenario {
++	m.scenarioMu.RLock()
++	defer m.scenarioMu.RUnlock()
++	return m.Scenario
+ }
+ 
+ func New(path string) (*Runner, error) {
+@@ -219,7 +228,7 @@ func (g *Runner) runToService(service *Service, name string) bool {
+ 
+ 		if scenario, ok := g.Scenario[value.Scenario]; ok {
+ 
+-			method := Method{*scenario, g}
++			method := &Method{Scenario: *scenario, runner: g}
+ 
+ 			r.Handle(value.Method, path, method.Handler())
+ 
+@@ -338,7 +347,7 @@ func (g *Runner) metricsHandler() fasthttp.RequestHandler {
+ 
+ func (m *Method) Handler() fasthttp.RequestHandler {
+ 
+-	cnt := 0
++	var cnt int64
+ 
+ 	return func(ctx *fasthttp.RequestCtx) {
+ 
+@@ -346,10 +355,9 @@ func (m *Method) Handler() fasthttp.RequestHandler {
+ 
+ 		defer func(name string) {
+ 			elapsed := time.Since(start) / time.Millisecond
+-			logger.Info(fmt.Sprintf("[%d] Host: %s | Path: %s | Executed: %s | Elapsed time: %dms", cnt, string(ctx.Host()), string(ctx.Request.URI().Path()), name, elapsed))
+-			cnt++
++			logger.Info(fmt.Sprintf("[%d] Host: %s | Path: %s | Executed: %s | Elapsed time: %dms", atomic.AddInt64(&cnt, 1)-1, string(ctx.Host()), string(ctx.Request.URI().Path()), name, elapsed))
+ 			go m.runner.Metrics.incrementEndpointCallCount(string(ctx.Request.Header.Method()), string(ctx.Request.URI().Path()))
+-		}(m.Name)
++		}(m.current().Name)
+ 
+ 		action, done := m.Execute()
+ 
+@@ -377,8 +385,9 @@ func (m *Method) Execute() (Action, []Done) {
+ 
+ 	var done []Done
+ 
+-	e := m.executables
+-	action := m.Accept
++	sc := m.current()
++	e := sc.executables
++	action := sc.Accept
+ 
+ 	for _, method := range e {
+ 
+@@ -389,14 +398,16 @@ func (m *Method) Execute() (Action, []Done) {
+ 		}
+ 
+ 		if err != nil {
+-			action = m.Ignore
++			action = sc.Ignore
+ 			logger.Error(err)
+ 			break
+ 		}
+ 	}
+ 
+ 	if action.scenario != nil {
++		m.scenarioMu.Lock()
+ 		m.Scenario = *action.scenario
++		m.scenarioMu.Unlock()
+ 	}
+ 
+ 	return action, done
+@@ -482,8 +493,7 @@ func (a *Action) Execute(ctx *fasthttp.RequestCtx) error {
+ 	return nil
+ }
+ 
+-
+-func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string){
++func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string) {
+ 
+ 	if httpMethod == "" || url == "" {
+ 		return
+@@ -497,13 +507,13 @@ func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string){
+ 	metrics.endpointCallCounts[key]++
+ }
+ 
+-func (metrics *Metrics) GetEndpointCallCount(httpMethod, url string) int{
++func (metrics *Metrics) GetEndpointCallCount(httpMethod, url string) int {
+ 	metrics.Lock()
+ 	defer metrics.Unlock()
+ 
+ 	return metrics.endpointCallCounts[endpointCallCountKey(httpMethod, url)]
+ }
+ 
+-func endpointCallCountKey(httpMethod, url string) string{
++func endpointCallCountKey(httpMethod, url string) string {
+ 	return fmt.Sprintf("%s-%s", httpMethod, url)
+-}
+\ No newline at end of file
++}
+diff --git a/runner/scenario.go b/runner/scenario.go
+index e2226ec..ce5330a 100644
+--- a/runner/scenario.go
++++ b/runner/scenario.go
+@@ -18,13 +18,14 @@ package runner
+ 
+ import (
+ 	"github.com/pkg/errors"
++	"sync/atomic"
+ 	"time"
+ )
+ 
+ type Limit struct {
+ 	s Scenario
+ 	l int
+-	n int
++	n int64 // accessed atomically
+ }
+ 
+ func NewLimit(s Scenario) *Limit {
+@@ -37,9 +38,7 @@ func NewLimit(s Scenario) *Limit {
+ 
+ func (l *Limit) Execute() (Done, error) {
+ 
+-	l.n++
+-
+-	if l.n > l.l {
++	if atomic.AddInt64(&l.n, 1) > int64(l.l) {
+ 		return nil, errors.New("Request count exceed scenario limit")
+ 	}
+ 
+@@ -49,7 +48,7 @@ func (l *Limit) Execute() (Done, error) {
+ type Rate struct {
+ 	s Scenario
+ 	r int
+-	n int
++	n int64 // accessed atomically
+ }
+ 
+ func NewRate(s Scenario) *Rate {
+@@ -61,15 +60,21 @@ func NewRate(s Scenario) *Rate {
+ }
+ 
+ func (r *Rate) Execute() (Done, error) {
+-
+-	r.n++
+-
+-	if r.n > r.r {
+-		r.n = 0
+-		return nil, errors.New("Request count exceed scenario rate limit")
++	// Increment and wrap in one step, so concurrent requests see the same
++	// sequence of counter values as sequential ones.
++	for {
++		old := atomic.LoadInt64(&r.n)
++		next := old + 1
++		if next > int64(r.r) {
++			if atomic.CompareAndSwapInt64(&r.n, old, 0) {
++				return nil, errors.New("Request count exceed scenario rate limit")
++			}
++			continue
++		}
++		if atomic.CompareAndSwapInt64(&r.n, old, next) {
++			return nil, nil
++		}
+ 	}
+-
+-	return nil, nil
+ }
+ 
+ type Duration struct {

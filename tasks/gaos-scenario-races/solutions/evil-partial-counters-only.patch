@@ -1,0 +1,96 @@
+diff --git a/runner/runner.go b/runner/runner.go
+index 93c1460..2c4c8f0 100644
+--- a/runner/runner.go
++++ b/runner/runner.go
+@@ -65,7 +65,7 @@ type Runner struct {
+ 	Service  map[string]*Service  `json:"service"`
+ 	Scenario map[string]*Scenario `json:"scenario"`
+ 	servers  []*fasthttp.Server
+-	Metrics Metrics
++	Metrics  Metrics
+ }
+ 
+ type Metrics struct {
+@@ -482,8 +482,7 @@ func (a *Action) Execute(ctx *fasthttp.RequestCtx) error {
+ 	return nil
+ }
+ 
+-
+-func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string){
++func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string) {
+ 
+ 	if httpMethod == "" || url == "" {
+ 		return
+@@ -497,13 +496,13 @@ func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string){
+ 	metrics.endpointCallCounts[key]++
+ }
+ 
+-func (metrics *Metrics) GetEndpointCallCount(httpMethod, url string) int{
++func (metrics *Metrics) GetEndpointCallCount(httpMethod, url string) int {
+ 	metrics.Lock()
+ 	defer metrics.Unlock()
+ 
+ 	return metrics.endpointCallCounts[endpointCallCountKey(httpMethod, url)]
+ }
+ 
+-func endpointCallCountKey(httpMethod, url string) string{
++func endpointCallCountKey(httpMethod, url string) string {
+ 	return fmt.Sprintf("%s-%s", httpMethod, url)
+-}
+\ No newline at end of file
++}
+diff --git a/runner/scenario.go b/runner/scenario.go
+index e2226ec..b5ad6dd 100644
+--- a/runner/scenario.go
++++ b/runner/scenario.go
+@@ -18,13 +18,15 @@ package runner
+ 
+ import (
+ 	"github.com/pkg/errors"
++	"sync"
+ 	"time"
+ )
+ 
+ type Limit struct {
+-	s Scenario
+-	l int
+-	n int
++	mu sync.Mutex
++	s  Scenario
++	l  int
++	n  int
+ }
+ 
+ func NewLimit(s Scenario) *Limit {
+@@ -36,6 +38,8 @@ func NewLimit(s Scenario) *Limit {
+ }
+ 
+ func (l *Limit) Execute() (Done, error) {
++	l.mu.Lock()
++	defer l.mu.Unlock()
+ 
+ 	l.n++
+ 
+@@ -47,9 +51,10 @@ func (l *Limit) Execute() (Done, error) {
+ }
+ 
+ type Rate struct {
+-	s Scenario
+-	r int
+-	n int
++	mu sync.Mutex
++	s  Scenario
++	r  int
++	n  int
+ }
+ 
+ func NewRate(s Scenario) *Rate {
+@@ -61,6 +66,8 @@ func NewRate(s Scenario) *Rate {
+ }
+ 
+ func (r *Rate) Execute() (Done, error) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
+ 
+ 	r.n++
+ 

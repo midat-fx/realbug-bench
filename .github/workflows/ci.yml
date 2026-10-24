@@ -23,6 +23,7 @@ jobs:
           - pgcdc-truncated-pgoutput
           - konsumer-batch-retry-prebatch
           - konsumer-shared-broker-race
+          - gaos-scenario-races
     steps:
       - uses: actions/checkout@v4
       # every solution is graded twice: a verdict that changes between runs fails the job as FLAKY

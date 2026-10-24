@@ -1,6 +1,6 @@
 # realbug-bench
 
-Coding-agent evaluation tasks cut from **real bugs fixed in real Go projects**, in the format used by
+Coding-agent evaluation tasks cut from **real bugs in real Go projects**, in the format used by
 agent-evaluation platforms (micro1, Mercor, AfterQuery): a maintainer-style issue, a pinned Docker
 image of the repository at the commit before the fix, a reference patch, visible and hidden tests,
 and a verifier that grades any patch.
@@ -20,11 +20,15 @@ and fails if any verdict is wrong or changes between runs.
 | [`pgcdc-truncated-pgoutput`](tasks/pgcdc-truncated-pgoutput/issue.md) | [Trendyol/go-pq-cdc@6110b91](https://github.com/Trendyol/go-pq-cdc/commit/6110b91596ea9597b588954f94a89a1b5f4cfcd6): pgoutput decoders panic on truncated messages | input hardening | 2 | 4 |
 | [`konsumer-batch-retry-prebatch`](tasks/konsumer-batch-retry-prebatch/issue.md) | [Trendyol/kafka-konsumer@0555952](https://github.com/Trendyol/kafka-konsumer/commit/055595218bb0d7bd99f45bdafc7b5cbe39dbf639): retry path skips `PreBatchFn`, ignores `SendDirectToDeadLetter` | behaviour / message routing | 2 | 4 |
 | [`konsumer-shared-broker-race`](tasks/konsumer-shared-broker-race/issue.md) | [Trendyol/kafka-konsumer@d80db5c](https://github.com/Trendyol/kafka-konsumer/commit/d80db5c55df7fa8c83e1da30b5bbae10c9c9720a): data race, broker slice trimmed in place | concurrency | 2 | 5 |
+| [`gaos-scenario-races`](tasks/gaos-scenario-races/issue.md) | [Trendyol/gaos@771d620](https://github.com/Trendyol/gaos/tree/771d620499118e64e048de918103bcc404bda74f): data races on rate/limit counters and on `direct` scenario switching; found and fixed in the pg-search-sync project, not fixed upstream | concurrency | 2 | 4 |
 
-All three are bugs fixed upstream in October 2026; the base commit of each task is the parent of
-the fix commit. These libraries are the Kafka/CDC stack used by the
-[ledger-saga](https://github.com/midat-fx/ledger-saga) project; tasks cut from ledger-saga itself
-and its sibling projects are added as their fixes land.
+The first three are bugs fixed upstream in October 2026; the base commit is the parent of the fix
+commit. These libraries are the Kafka/CDC stack used by the ledger-saga and pg-search-sync
+projects. `gaos-scenario-races` comes from pg-search-sync, which uses gaos for fault injection: it
+found the races (`docs/upstream.md`, reproduced with `-race`) and fixed them in a local gaos commit
+that is not upstream yet. The base is the pinned upstream commit, the reference patch is the race
+part of that fix (the same commit also fixes two unrelated gaos bugs, left out of this task).
+Tasks from the projects' own code are added as their fixes land.
 
 **A note on `pgcdc-truncated-pgoutput`.** The upstream fix bounds-checks Begin, Commit, tuple data
 and the TOAST copy in Update, but not the Relation decoder: a Relation message cut after the table
@@ -53,7 +57,8 @@ all modules are downloaded at build time, so grading is offline and repeatable.
 ## Solutions and what catches them
 
 Expected verdicts come from file names: `reference.patch` and `ok-*.patch` must pass,
-`evil-*.patch` must fail. The layer is the one reported by the verifier (3 runs each, identical).
+`evil-*.patch` must fail. The layer is the one reported by the verifier; every solution was graded
+3 times locally with identical verdicts.
 
 **pgcdc-truncated-pgoutput**
 
@@ -89,9 +94,33 @@ Expected verdicts come from file names: `reference.patch` and `ok-*.patch` must 
 | `evil-mutex-around-trim` | FAIL visible-tests | guards the in-place write with a mutex the reader never takes; the race detector still fires |
 | `evil-delete-visible-tests` | FAIL visible-tests | deletes the visible test file |
 
+**gaos-scenario-races**
+
+| Solution | Verdict | What it does |
+|---|---|---|
+| `reference` | PASS | the pg-search-sync fix: mutexes in `Rate`/`Limit`, a mutex around the `Method` scenario, atomic request counter |
+| `ok-atomic-counters-rwmutex` | PASS | lock-free counters (CAS loop that increments and wraps in one step) and an `RWMutex` snapshot of the scenario |
+| `evil-partial-counters-only` | FAIL hidden-tests | locks the counters, the `direct` scenario switch still races |
+| `evil-hardcode-rate-one` | FAIL hidden-tests | a global toggle for `rate: 1`, the visible test's configuration |
+| `evil-atomic-check-then-reset` | FAIL visible-tests | atomic increment and a separate atomic reset: no race report, but counts drift under concurrency |
+| `evil-delete-visible-tests` | FAIL visible-tests | deletes the visible test file |
+
 ## Coding-agent results
 
-AGENT_RESULTS_PLACEHOLDER
+Agents get the issue text and a workspace with the base commit and the visible tests
+(`./bench workspace`), run headless with full permissions in a directory outside this repository,
+and their diff is graded by the same verifier. Transcripts are checked for reads of this
+repository (hidden tests, solutions); none were found.
+
+| Task | Agent | Model | Time | Verdict |
+|---|---|---|---|---|
+| `konsumer-shared-broker-race` | Codex CLI 0.149.0-alpha.4 | gpt-5.6-terra | 6 min 49 s | **PASS** (all layers; it also edited two existing tests, which layer 2 discarded) |
+| `pgcdc-truncated-pgoutput` | Codex CLI 0.149.0-alpha.4 | gpt-5.6-terra | 7 min 56 s | **PASS** (all layers; it found the Relation decoder on its own) |
+| `konsumer-batch-retry-prebatch` | Codex CLI | — | — | not run: the account hit its Codex usage limit |
+| `gaos-scenario-races` | — | — | — | not run yet |
+| all tasks | Claude Code 2.1.220 | — | — | not run yet: the CLI's login on the run machine had expired |
+
+Both passing patches were graded three times with the same verdict. Run 2026-10-24.
 
 ## Layout
 
@@ -120,6 +149,7 @@ Other commands:
 
 ## License
 
-The harness, issues and tests are MIT. Patches under `tasks/*/solutions` modify MIT-licensed code
-by Trendyol (go-pq-cdc, kafka-konsumer); `reference.patch` files are the upstream fixes by their
-authors (linked above), extended where noted.
+The harness, issues and tests are MIT. Patches under `tasks/*/solutions` modify code by Trendyol:
+go-pq-cdc and kafka-konsumer (MIT), gaos (Apache-2.0). `reference.patch` files are the upstream
+fixes by their authors (linked above), extended where noted; the gaos reference is the
+pg-search-sync project's fix.

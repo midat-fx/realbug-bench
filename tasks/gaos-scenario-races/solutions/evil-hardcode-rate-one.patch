@@ -1,0 +1,76 @@
+diff --git a/runner/runner.go b/runner/runner.go
+index 93c1460..2c4c8f0 100644
+--- a/runner/runner.go
++++ b/runner/runner.go
+@@ -65,7 +65,7 @@ type Runner struct {
+ 	Service  map[string]*Service  `json:"service"`
+ 	Scenario map[string]*Scenario `json:"scenario"`
+ 	servers  []*fasthttp.Server
+-	Metrics Metrics
++	Metrics  Metrics
+ }
+ 
+ type Metrics struct {
+@@ -482,8 +482,7 @@ func (a *Action) Execute(ctx *fasthttp.RequestCtx) error {
+ 	return nil
+ }
+ 
+-
+-func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string){
++func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string) {
+ 
+ 	if httpMethod == "" || url == "" {
+ 		return
+@@ -497,13 +496,13 @@ func (metrics *Metrics) incrementEndpointCallCount(httpMethod, url string){
+ 	metrics.endpointCallCounts[key]++
+ }
+ 
+-func (metrics *Metrics) GetEndpointCallCount(httpMethod, url string) int{
++func (metrics *Metrics) GetEndpointCallCount(httpMethod, url string) int {
+ 	metrics.Lock()
+ 	defer metrics.Unlock()
+ 
+ 	return metrics.endpointCallCounts[endpointCallCountKey(httpMethod, url)]
+ }
+ 
+-func endpointCallCountKey(httpMethod, url string) string{
++func endpointCallCountKey(httpMethod, url string) string {
+ 	return fmt.Sprintf("%s-%s", httpMethod, url)
+-}
+\ No newline at end of file
++}
+diff --git a/runner/scenario.go b/runner/scenario.go
+index e2226ec..93eda95 100644
+--- a/runner/scenario.go
++++ b/runner/scenario.go
+@@ -18,6 +18,7 @@ package runner
+ 
+ import (
+ 	"github.com/pkg/errors"
++	"sync/atomic"
+ 	"time"
+ )
+ 
+@@ -46,6 +47,8 @@ func (l *Limit) Execute() (Done, error) {
+ 	return nil, nil
+ }
+ 
++var rateOneCalls int64
++
+ type Rate struct {
+ 	s Scenario
+ 	r int
+@@ -61,6 +64,13 @@ func NewRate(s Scenario) *Rate {
+ }
+ 
+ func (r *Rate) Execute() (Done, error) {
++	if r.r == 1 {
++		// every other request is rejected
++		if atomic.AddInt64(&rateOneCalls, 1)%2 == 1 {
++			return nil, errors.New("Request count exceed scenario rate limit")
++		}
++		return nil, nil
++	}
+ 
+ 	r.n++
+ 

@@ -1,0 +1,148 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..66f8cb5 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -91,9 +91,7 @@ func (cfg ReaderConfig) JSON() string {
+ }
+ 
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+-	}
++	cfg.Brokers = trimBrokerList(cfg.Brokers)
+ }
+ 
+ func (cfg *ConsumerConfig) JSON() string {
+@@ -296,9 +294,8 @@ func (cfg *ConsumerConfig) newKafkaReader(logger LoggerInterface) (Reader, error
+ 		return nil, err
+ 	}
+ 
+-	cfg.Reader.removeSpaceBrokerList()
+-
+ 	readerCfg := kafka.ReaderConfig(cfg.Reader)
++	readerCfg.Brokers = trimBrokerList(cfg.Reader.Brokers)
+ 
+ 	readerCfg.Dialer = dialer
+ 	if cfg.Rack != "" {
+diff --git a/consumer_config_test.go b/consumer_config_test.go
+index 3076cde..1ddc359 100644
+--- a/consumer_config_test.go
++++ b/consumer_config_test.go
+@@ -529,6 +529,31 @@ func TestConsumerConfig_removeSpaceBrokerList(t *testing.T) {
+ 	}
+ }
+ 
++func TestConsumerConfig_newKafkaReader_trimsPrivateBrokerList(t *testing.T) {
++	brokers := []string{" 127.0.0.1:9092 ", " 127.0.0.2:9092 "}
++	cfg := &ConsumerConfig{
++		Reader: ReaderConfig{
++			Brokers: brokers,
++			Topic:   "topic",
++		},
++	}
++
++	reader, err := cfg.newKafkaReader(NewZapLogger(LogLevelDebug))
++	if err != nil {
++		t.Fatalf("newKafkaReader() error = %v", err)
++	}
++	defer reader.Close()
++
++	if want := []string{" 127.0.0.1:9092 ", " 127.0.0.2:9092 "}; !reflect.DeepEqual(brokers, want) {
++		t.Errorf("caller broker list was modified: got %q, want %q", brokers, want)
++	}
++
++	readerConfig := reader.(*readerWrapper).r.Config()
++	if want := []string{"127.0.0.1:9092", "127.0.0.2:9092"}; !reflect.DeepEqual(readerConfig.Brokers, want) {
++		t.Errorf("reader brokers = %q, want %q", readerConfig.Brokers, want)
++	}
++}
++
+ func getConsumerConfigExample() *ConsumerConfig {
+ 	return &ConsumerConfig{
+ 		Rack:     "stage",
+diff --git a/producer.go b/producer.go
+index 57803e9..925a93b 100644
+--- a/producer.go
++++ b/producer.go
+@@ -23,9 +23,9 @@ type producer struct {
+ }
+ 
+ func NewProducer(cfg *ProducerConfig, interceptors ...ProducerInterceptor) (Producer, error) {
+-	cfg.Writer.removeSpaceBrokerList()
++	brokers := trimBrokerList(cfg.Writer.Brokers)
+ 	kafkaWriter := &kafka.Writer{
+-		Addr:                   kafka.TCP(cfg.Writer.Brokers...),
++		Addr:                   kafka.TCP(brokers...),
+ 		Topic:                  cfg.Writer.Topic,
+ 		Balancer:               &defaultBalancer{},
+ 		MaxAttempts:            cfg.Writer.MaxAttempts,
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..c0565d7 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -38,9 +38,24 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++	cfg.Brokers = trimBrokerList(cfg.Brokers)
++}
++
++// trimBrokerList returns a private, whitespace-trimmed copy of brokers.
++//
++// Kafka readers can access their broker slice from background goroutines, so
++// constructors must not reuse a caller-owned slice when normalizing addresses.
++func trimBrokerList(brokers []string) []string {
++	if brokers == nil {
++		return nil
+ 	}
++
++	trimmed := make([]string, len(brokers))
++	for i := range brokers {
++		trimmed[i] = strings.TrimSpace(brokers[i])
++	}
++
++	return trimmed
+ }
+ 
+ type TransportConfig struct {
+diff --git a/producer_test.go b/producer_test.go
+index c6e8258..acee5ef 100644
+--- a/producer_test.go
++++ b/producer_test.go
+@@ -2,6 +2,7 @@ package kafka
+ 
+ import (
+ 	"context"
++	"reflect"
+ 	"testing"
+ 
+ 	"github.com/gofiber/fiber/v2/utils"
+@@ -9,6 +10,26 @@ import (
+ 	"github.com/segmentio/kafka-go"
+ )
+ 
++func TestNewProducer_trimsPrivateBrokerList(t *testing.T) {
++	brokers := []string{" 127.0.0.1:9092 ", " 127.0.0.2:9092 "}
++	cfg := &ProducerConfig{Writer: WriterConfig{Brokers: brokers}}
++
++	p, err := NewProducer(cfg)
++	if err != nil {
++		t.Fatalf("NewProducer() error = %v", err)
++	}
++	defer p.Close()
++
++	if want := []string{" 127.0.0.1:9092 ", " 127.0.0.2:9092 "}; !reflect.DeepEqual(brokers, want) {
++		t.Errorf("caller broker list was modified: got %q, want %q", brokers, want)
++	}
++
++	writer := p.(*producer).w.(*kafka.Writer)
++	if got, want := writer.Addr.String(), "127.0.0.1:9092,127.0.0.2:9092"; got != want {
++		t.Errorf("writer brokers = %q, want %q", got, want)
++	}
++}
++
+ func Test_producer_Produce_Successfully(t *testing.T) {
+ 	// Given
+ 	mw := &mockWriter{}

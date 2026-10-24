@@ -1,0 +1,13 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+discarding candidate changes to test files:
+  consumer_config_test.go
+  producer_test.go
+== layer 3: build
+== layer 4: visible tests, race detector, -count=5
+ok  	github.com/Trendyol/kafka-konsumer/v2	1.134s
+== layer 5: hidden tests, race detector, -count=5
+ok  	github.com/Trendyol/kafka-konsumer/v2	1.139s
+== layer 6: upstream regression suite
+ok  	github.com/Trendyol/kafka-konsumer/v2	35.147s
+VERDICT PASS all-layers

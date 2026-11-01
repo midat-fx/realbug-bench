@@ -188,15 +188,51 @@ Agents get the issue text and a workspace with the base commit and the visible t
 and their diff is graded by the same verifier. Transcripts are checked for reads of this
 repository (hidden tests, solutions); none were found.
 
+### Claude Code
+
+Claude Code 2.1.220 (`claude -p`, `--permission-mode bypassPermissions`, project settings only, no
+MCP servers), three runs per task and model, 54 runs on 2026-11-01. Each cell: passing runs, then
+the median wall-clock time and median cost of the three.
+
+| Task | Haiku 5.5 | Sonnet 5.5 |
+|---|---|---|
+| `konsumer-shared-broker-race` | 3/3 · 122 s · $1.13 | 3/3 · 66 s · $0.21 |
+| `pgcdc-truncated-pgoutput` | 3/3 · 196 s · $2.45 | 3/3 · 60 s · $0.41 |
+| `konsumer-batch-retry-prebatch` | **2/3** · 167 s · $1.26 | **1/3** · 78 s · $0.27 |
+| `gaos-scenario-races` | 3/3 · 133 s · $1.52 | 3/3 · 43 s · $0.24 |
+| `sqlparse-dotted-real-name` | 3/3 · 62 s · $0.85 | 3/3 · 41 s · $0.30 |
+| `tomlkit-crlf-error-position` | 3/3 · 113 s · $1.22 | 3/3 · 46 s · $0.21 |
+| `path-to-regexp-stringify-empty-text` | 3/3 · 67 s · $0.69 | 3/3 · 29 s · $0.18 |
+| `yaml-flow-key-after-blank-line` | 3/3 · 269 s · $2.14 | 3/3 · 68 s · $0.34 |
+| `immer-revoked-mapset-reads` | 3/3 · 155 s · $1.20 | 3/3 · 57 s · $0.31 |
+| **Total** | **26/27** · 65 min · $36.95 | **25/27** · 26 min · $7.52 |
+
+- All three failures are on `konsumer-batch-retry-prebatch` and fail the same hidden test,
+  `TestHiddenRetryWithoutDeadLetterProducerKeepsRetrying`: a message with `SendDirectToDeadLetter`
+  and no dead letter producer configured. All three patches do return an error, so the message is
+  retried, but not the consume error: two return their own error ("dead letter producer is not
+  configured…"), one a new error with the same text. The test requires
+  `errors.Is(err, consumeErr)`; the issue only says "the callback returns an error and the message
+  follows the normal retry flow". This is a gap in the issue text rather than a wrong fix, and is
+  left as measured: the verdicts are those of the verifier the runs were graded with.
+- Eight runs also added test cases to existing test files; layer 2 discarded them, and all eight
+  passed on the original tests. No run hit the 30-minute cap.
+- Cost is the `total_cost_usd` Claude Code reports (an API-price equivalent; the runs used a
+  subscription). Haiku costs more than Sonnet here because it takes more turns (per-task median
+  12–30 against 7–14), each re-reading the growing context.
+- Every run (patch, grader log, `result.json`, sanitized transcript) is in `results/agents/`; one
+  row per run in [results/agent-runs.md](results/agent-runs.md).
+
+### Codex CLI
+
 | Task | Agent | Model | Time | Verdict |
 |---|---|---|---|---|
 | `konsumer-shared-broker-race` | Codex CLI 0.149.0-alpha.4 | gpt-5.6-terra | 6 min 49 s | **PASS** (all layers; it also edited two existing tests, which layer 2 discarded) |
 | `pgcdc-truncated-pgoutput` | Codex CLI 0.149.0-alpha.4 | gpt-5.6-terra | 7 min 56 s | **PASS** (all layers; it found the Relation decoder on its own) |
 | `konsumer-batch-retry-prebatch` | Codex CLI | — | — | not run: the account hit its Codex usage limit |
-| `gaos-scenario-races` | — | — | — | not run yet |
-| all tasks | Claude Code 2.1.220 | — | — | not run yet: the CLI's login on the run machine had expired |
 
-Both passing patches were graded three times with the same verdict. Run 2026-10-24.
+Both passing patches were graded three times with the same verdict. Run 2026-10-24. The other
+tasks have no Codex runs.
 
 ## Layout
 

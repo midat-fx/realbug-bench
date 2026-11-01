@@ -179,7 +179,7 @@ report() {
 	echo "| Task | Model | Verdict | Time | Turns | Cost (USD) | Run |"
 	echo "|---|---|---|---|---|---|---|"
 	for f in "$ROOT"/results/agents/*/*/result.json; do
-		jq -r --arg run "${f#"$ROOT"/}" '[.started, "| `\(.task)` | \(.model) | \(.verdict) | \(.seconds / 60 | floor) min \(.seconds % 60) s | \(.turns // "—") | \(if .cost_usd then (.cost_usd * 100 | round / 100) else "—" end) | [\($run | split("/")[3])](\($run | rtrimstr("/result.json"))) |"] | @tsv' "$f"
+		jq -r --arg run "${f#"$ROOT"/}" '[.started, "| `\(.task)` | \(.model) | \(.verdict) | \(.seconds / 60 | floor) min \(.seconds % 60) s | \(.turns // "—") | \(if .cost_usd then (.cost_usd * 100 | round | "\(. / 100 | floor).\(. % 100 + 100 | tostring | .[1:])") else "—" end) | [\($run | split("/")[3])](\($run | rtrimstr("/result.json"))) |"] | @tsv' "$f"
 	done | sort | cut -f2-
 }
 

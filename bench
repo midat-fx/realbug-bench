@@ -5,11 +5,13 @@
 #   ./bench verify <task> <patch>     grade one patch, print the verdict
 #   ./bench workspace <task> <dir>    create the agent workspace: upstream at the base commit + visible tests
 #   ./bench agent <task> <agent>      run a coding agent (claude|codex) on a task, grade its diff
+#   ./bench report                    markdown table of every agent run in results/agents
 #   ./bench build <task>              build the task image
 #
 # Expected verdicts come from file names: reference.patch and ok-*.patch must PASS, evil-*.patch must FAIL.
 # --hostname localhost: without a network the container hostname does not resolve, and testsuite services bind to it.
 # RUNS (default 2) repeats the whole check to catch flaky verdicts. PRUNE=1 removes each task image after use.
+# Agent runs: AGENT_TIMEOUT (seconds, default 1800) caps a run; KEEP_WORKSPACE=1 keeps the agent's workspace.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
@@ -96,6 +98,9 @@ workspace() {
 		[ ! -e "$ws" ] || die "$ws already exists"
 		git clone --quiet "$UPSTREAM" "$ws"
 		git -C "$ws" checkout --quiet -B task "$BASE_COMMIT"
+		# test-data submodules the suites need (task.env SUBMODULES), as in the task image
+		# shellcheck disable=SC2086
+		[ -z "${SUBMODULES:-}" ] || git -C "$ws" submodule update --quiet --init --depth 1 $SUBMODULES
 		git -C "$ws" remote remove origin
 		cp -R "$dir/tests/visible/." "$ws/"
 		git -C "$ws" add -A
@@ -112,29 +117,38 @@ agent() {
 	local task=$1 who=$2 dir stamp ws out model
 	case "$who" in claude) model=${CLAUDE_MODEL:-claude-opus-5-5} ;; codex) model=${CODEX_MODEL:-} ;; esac
 	dir=$(task_dir "$task")
-	stamp=$(date -u +%Y%m%dT%H%M%SZ)
-	out="$ROOT/results/agents/$task/$who-$stamp"
-	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}/realbug-$task-$who-$stamp"
-	mkdir -p "$out"
+	mkdir -p "$ROOT/results/agents/$task"
+	# one directory per run; runs of the same task in parallel must not share one
+	while :; do
+		stamp=$(date -u +%Y%m%dT%H%M%SZ)
+		out="$ROOT/results/agents/$task/$who${model:+-${model#claude-}}-$stamp"
+		mkdir "$out" 2>/dev/null && break
+		sleep 1
+	done
+	# no trailing slash: macOS TMPDIR has one, and a "//" path would slip past the transcript sanitizer
+	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}"
+	ws="${ws%/}/realbug-${out##*/}-$task"
 	workspace "$task" "$ws"
 	local prompt
-	prompt="You are working in a $(. "$dir/task.env"; echo "$LANGUAGE" | sed 's/^go$/Go/;s/^cpp$/C++/;s/^python$/Python/') repository. Resolve the following GitHub issue by changing the code.
+	prompt="You are working in a $(. "$dir/task.env"; echo "$LANGUAGE" | sed 's/^go$/Go/;s/^cpp$/C++/;s/^python$/Python/;s/^typescript$/TypeScript/') repository. Resolve the following GitHub issue by changing the code.
 Do not modify existing tests to make them pass. Visible tests are in the repository; hidden tests will also be run.
 
 $(cat "$dir/issue.md")"
 	local start end rc=0
+	# perl alarm: a wall-clock cap without GNU timeout (not on macOS); a timed-out run exits 142
+	local cap=(perl -e 'alarm shift; exec @ARGV' "${AGENT_TIMEOUT:-1800}")
 	start=$(date +%s)
 	case "$who" in
 	claude)
 		# project-only settings, no MCP servers, no skills: the agent sees the workspace and the issue only
-		(cd "$ws" && claude -p "$prompt" --model "$model" --permission-mode bypassPermissions \
+		(cd "$ws" && "${cap[@]}" claude -p "$prompt" --model "$model" --permission-mode bypassPermissions \
 			--setting-sources project --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
 			--disable-slash-commands --no-session-persistence \
-			--output-format stream-json --verbose >"$out/transcript.jsonl" 2>"$out/stderr.log") || rc=$?
+			--output-format stream-json --verbose </dev/null >"$out/transcript.jsonl" 2>"$out/stderr.log") || rc=$?
 		;;
 	codex)
 		# no sandbox: the Go toolchain needs its build cache outside the workspace (same latitude as claude above)
-		(cd "$ws" && "${CODEX_BIN:-codex}" exec ${model:+-m "$model"} --dangerously-bypass-approvals-and-sandbox \
+		(cd "$ws" && "${cap[@]}" "${CODEX_BIN:-codex}" exec ${model:+-m "$model"} --dangerously-bypass-approvals-and-sandbox \
 			--skip-git-repo-check --json "$prompt" >"$out/transcript.jsonl" 2>"$out/stderr.log") || rc=$?
 		;;
 	*) die "unknown agent $who" ;;
@@ -146,8 +160,27 @@ $(cat "$dir/issue.md")"
 	verdict=$(verify "$task" "$out/candidate.patch" "$out/grade.log")
 	# contamination check: the agent must not have read this repository (hidden tests, solutions)
 	if grep -q "realbug-bench/tasks" "$out"/transcript.* 2>/dev/null; then verdict="$verdict (CONTAMINATED)"; fi
-	printf '{"task":"%s","agent":"%s","model":"%s","started":"%s","seconds":%d,"agent_exit":%d,"verdict":"%s"}\n' \
-		"$task" "$who" "${model:-default}" "$stamp" $((end - start)) "$rc" "$verdict" | tee "$out/result.json"
+	# shareable copy of the transcript: workspace and home paths replaced, account rate-limit events dropped
+	sed -e '/"type":"rate_limit_event"/d' -e "s#/private$ws#\$WORKSPACE#g; s#$ws#\$WORKSPACE#g; s#$HOME#\$HOME#g" "$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
+	# turns, cost and tokens from Claude Code's final stream-json event (null for other agents)
+	local usage='{}'
+	[ "$who" != claude ] || usage=$(jq -c 'select(.type == "result")
+		| {turns: .num_turns, cost_usd: .total_cost_usd, is_error,
+		   output_tokens: .usage.output_tokens, cache_read_tokens: .usage.cache_read_input_tokens}' \
+		"$out/transcript.jsonl" 2>/dev/null | tail -1)
+	jq -cn --arg task "$task" --arg agent "$who" --arg model "${model:-default}" --arg started "$stamp" \
+		--argjson seconds $((end - start)) --argjson agent_exit "$rc" --arg verdict "$verdict" --argjson usage "${usage:-{\}}" \
+		'{$task, $agent, $model, $started, $seconds, $agent_exit, $verdict} + $usage' | tee "$out/result.json"
+	[ "${KEEP_WORKSPACE:-0}" = 1 ] || rm -rf "$ws"
+}
+
+# One row per agent run, oldest first.
+report() {
+	echo "| Task | Model | Verdict | Time | Turns | Cost (USD) | Run |"
+	echo "|---|---|---|---|---|---|---|"
+	for f in "$ROOT"/results/agents/*/*/result.json; do
+		jq -r --arg run "${f#"$ROOT"/}" '[.started, "| `\(.task)` | \(.model) | \(.verdict) | \(.seconds / 60 | floor) min \(.seconds % 60) s | \(.turns // "—") | \(if .cost_usd then (.cost_usd * 100 | round | "\(. / 100 | floor).\(. % 100 + 100 | tostring | .[1:])") else "—" end) | [\($run | split("/")[3])](\($run | rtrimstr("/result.json"))) |"] | @tsv' "$f"
+	done | sort | cut -f2-
 }
 
 cmd=${1:-}
@@ -157,6 +190,7 @@ check) check "$@" ;;
 verify) [ $# -eq 2 ] || die "usage: bench verify <task> <patch>"; build "$1"; verify "$1" "$2" ;;
 workspace) [ $# -eq 2 ] || die "usage: bench workspace <task> <dir>"; workspace "$1" "$2" ;;
 agent) [ $# -eq 2 ] || die "usage: bench agent <task> <claude|codex>"; agent "$1" "$2" ;;
+report) report ;;
 build) build "$1" ;;
-*) sed -n '2,11p' "$0"; exit 2 ;;
+*) sed -n '2,12p' "$0"; exit 2 ;;
 esac

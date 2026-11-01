@@ -1,0 +1,37 @@
+diff --git a/src/index.ts b/src/index.ts
+index 913a513..e28c4d3 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -622,6 +622,7 @@ function negate(a: string, b: string): string {
+  */
+ function stringifyTokens(tokens: Token[], index: number): string {
+   let value = "";
++  tokens = joinText(tokens);
+ 
+   while (index < tokens.length) {
+     const token = tokens[index++];
+@@ -652,6 +653,24 @@ function stringifyTokens(tokens: Token[], index: number): string {
+   return value;
+ }
+ 
++/**
++ * Join adjacent text tokens. Text can be split across tokens (or be empty), and
++ * the check for a name running into the following text must see what actually
++ * follows the name.
++ */
++function joinText(tokens: Token[]): Token[] {
++  const result: Token[] = [];
++  for (const token of tokens) {
++    const last = result[result.length - 1];
++    if (token.type === "text" && last?.type === "text") {
++      result[result.length - 1] = { type: "text", value: last.value + token.value };
++    } else {
++      result.push(token);
++    }
++  }
++  return result;
++}
++
+ /**
+  * Stringify token data into a path string.
+  */

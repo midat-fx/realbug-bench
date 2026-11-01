@@ -1,0 +1,133 @@
+diff --git a/__tests__/revoked-map-set.js b/__tests__/revoked-map-set.js
+index cae3016..60234cf 100644
+--- a/__tests__/revoked-map-set.js
++++ b/__tests__/revoked-map-set.js
+@@ -20,4 +20,61 @@ describe("revoked map and set drafts", () => {
+ 		})
+ 		expect(() => leaked.size).toThrow()
+ 	})
++
++	test("every map read throws after revocation, empty or modified", () => {
++		for (const modify of [false, true]) {
++			let leaked
++			produce({map: new Map(modify ? [["a", 1]] : [])}, draft => {
++				if (modify) draft.map.set("b", 2)
++				leaked = draft.map
++			})
++			expect(() => leaked.size).toThrow()
++			expect(() => leaked.has("a")).toThrow()
++			expect(() => leaked.get("a")).toThrow()
++			expect(() => leaked.set("a", 1)).toThrow()
++			expect(() => leaked.delete("zzz")).toThrow()
++			expect(() => leaked.clear()).toThrow()
++			expect(() => leaked.keys()).toThrow()
++			expect(() => leaked.values()).toThrow()
++			expect(() => leaked.entries()).toThrow()
++			expect(() => leaked[Symbol.iterator]()).toThrow()
++			expect(() => leaked.forEach(() => {})).toThrow()
++		}
++	})
++
++	test("every set read throws after revocation, empty or modified", () => {
++		for (const modify of [false, true]) {
++			let leaked
++			produce({set: new Set(modify ? [1] : [])}, draft => {
++				if (modify) draft.set.add(2)
++				leaked = draft.set
++			})
++			expect(() => leaked.size).toThrow()
++			expect(() => leaked.has(1)).toThrow()
++			expect(() => leaked.add(3)).toThrow()
++			expect(() => leaked.delete(1)).toThrow()
++			expect(() => leaked.delete(999)).toThrow()
++			expect(() => leaked.clear()).toThrow()
++			expect(() => leaked.keys()).toThrow()
++			expect(() => leaked.values()).toThrow()
++			expect(() => leaked.entries()).toThrow()
++			expect(() => leaked[Symbol.iterator]()).toThrow()
++			expect(() => leaked.forEach(() => {})).toThrow()
++		}
++	})
++
++	test("produce returns plain, usable collections", () => {
++		const base = {map: new Map([["a", 1]]), set: new Set([1])}
++		const next = produce(base, draft => {
++			draft.map.set("b", 2)
++			draft.set.add(2)
++		})
++		expect(next.map).toBeInstanceOf(Map)
++		expect(next.set).toBeInstanceOf(Set)
++		expect(next.map.size).toBe(2)
++		expect([...next.map.keys()]).toEqual(["a", "b"])
++		expect([...next.set]).toEqual([1, 2])
++		expect(next.map.constructor).toBe(Map)
++		expect(next.set.constructor).toBe(Set)
++	})
+ })
+diff --git a/src/plugins/mapset.ts b/src/plugins/mapset.ts
+index 0cc2158..219cf34 100644
+--- a/src/plugins/mapset.ts
++++ b/src/plugins/mapset.ts
+@@ -54,11 +54,15 @@ export function enableMapSet() {
+ 		}
+ 
+ 		get size(): number {
+-			return latest(this[DRAFT_STATE]).size
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).size
+ 		}
+ 
+ 		has(key: any): boolean {
+-			return latest(this[DRAFT_STATE]).has(key)
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).has(key)
+ 		}
+ 
+ 		set(key: any, value: any) {
+@@ -76,12 +80,12 @@ export function enableMapSet() {
+ 		}
+ 
+ 		delete(key: any): boolean {
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
+ 			if (!this.has(key)) {
+ 				return false
+ 			}
+ 
+-			const state: MapState = this[DRAFT_STATE]
+-			assertUnrevoked(state)
+ 			prepareMapCopy(state)
+ 			markChanged(state)
+ 			if (state.base_.has(key)) {
+@@ -109,6 +113,7 @@ export function enableMapSet() {
+ 
+ 		forEach(cb: (value: any, key: any, self: any) => void, thisArg?: any) {
+ 			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
+ 			latest(state).forEach((_value: any, key: any, _map: any) => {
+ 				cb.call(thisArg, this.get(key), key, this)
+ 			})
+@@ -132,7 +137,9 @@ export function enableMapSet() {
+ 		}
+ 
+ 		keys(): IterableIterator<any> {
+-			return latest(this[DRAFT_STATE]).keys()
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).keys()
+ 		}
+ 
+ 		values(): IterableIterator<any> {
+@@ -225,7 +232,9 @@ export function enableMapSet() {
+ 		}
+ 
+ 		get size(): number {
+-			return latest(this[DRAFT_STATE]).size
++			const state: SetState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).size
+ 		}
+ 
+ 		has(value: any): boolean {

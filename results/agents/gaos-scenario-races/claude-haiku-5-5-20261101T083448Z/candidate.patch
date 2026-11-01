@@ -1,0 +1,250 @@
+diff --git a/runner/method_concurrency_test.go b/runner/method_concurrency_test.go
+new file mode 100644
+index 0000000..115d0da
+--- /dev/null
++++ b/runner/method_concurrency_test.go
+@@ -0,0 +1,87 @@
++package runner
++
++import (
++	"sync"
++	"sync/atomic"
++	"testing"
++
++	"github.com/valyala/fasthttp"
++)
++
++func rejectedSequentially(exec Executable, calls int) int64 {
++	var rejected int64
++	for i := 0; i < calls; i++ {
++		if _, err := exec(); err != nil {
++			rejected++
++		}
++	}
++	return rejected
++}
++
++func rejectedConcurrently(exec Executable, calls int) int64 {
++	var rejected int64
++	var wg sync.WaitGroup
++	for i := 0; i < calls; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			if _, err := exec(); err != nil {
++				atomic.AddInt64(&rejected, 1)
++			}
++		}()
++	}
++	wg.Wait()
++	return rejected
++}
++
++func TestLimitMatchesSequentialUnderConcurrency(t *testing.T) {
++	for _, limit := range []int{1, 2, 7, 100} {
++		want := rejectedSequentially(NewLimit(Scenario{Limit: limit}).Execute, 300)
++		got := rejectedConcurrently(NewLimit(Scenario{Limit: limit}).Execute, 300)
++		if got != want {
++			t.Errorf("limit %d: rejected %d concurrently, want %d", limit, got, want)
++		}
++	}
++}
++
++func TestRateMatchesSequentialUnderConcurrency(t *testing.T) {
++	for _, rate := range []int{1, 2, 5, 50} {
++		want := rejectedSequentially(NewRate(Scenario{Rate: rate}).Execute, 300)
++		got := rejectedConcurrently(NewRate(Scenario{Rate: rate}).Execute, 300)
++		if got != want {
++			t.Errorf("rate %d: rejected %d concurrently, want %d", rate, got, want)
++		}
++	}
++}
++
++func TestMethodHandlerConcurrentWithDirectSwitch(t *testing.T) {
++	r := &Runner{
++		Scenario: map[string]*Scenario{
++			"a": {Name: "a", Rate: 2, Accept: Action{Direct: "b", Status: fasthttp.StatusOK}},
++			"b": {Name: "b", Limit: 5, Accept: Action{Direct: "a", Status: fasthttp.StatusOK}},
++		},
++		Metrics: Metrics{endpointCallCounts: map[string]int{}},
++	}
++	r.resolveScenarios()
++
++	m := &Method{Scenario: *r.Scenario["a"], runner: r}
++	handler := m.Handler()
++
++	const requests = 200
++	var wg sync.WaitGroup
++	for i := 0; i < requests; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			var ctx fasthttp.RequestCtx
++			ctx.Request.Header.SetMethod(fasthttp.MethodGet)
++			ctx.Request.SetRequestURI("/path")
++			handler(&ctx)
++		}()
++	}
++	wg.Wait()
++
++	if got := r.Metrics.GetEndpointCallCount(fasthttp.MethodGet, "/path"); got != requests {
++		t.Fatalf("endpoint call count %d, want %d", got, requests)
++	}
++}
+diff --git a/runner/runner.go b/runner/runner.go
+index 93c1460..5f30bc1 100644
+--- a/runner/runner.go
++++ b/runner/runner.go
+@@ -29,6 +29,7 @@ import (
+ 	"os"
+ 	"os/signal"
+ 	"sync"
++	"sync/atomic"
+ 	"syscall"
+ 	"time"
+ )
+@@ -122,6 +123,7 @@ type Scenario struct {
+ type Method struct {
+ 	Scenario
+ 	runner *Runner
++	mu     sync.RWMutex
+ }
+ 
+ func New(path string) (*Runner, error) {
+@@ -219,7 +221,7 @@ func (g *Runner) runToService(service *Service, name string) bool {
+ 
+ 		if scenario, ok := g.Scenario[value.Scenario]; ok {
+ 
+-			method := Method{*scenario, g}
++			method := Method{Scenario: *scenario, runner: g}
+ 
+ 			r.Handle(value.Method, path, method.Handler())
+ 
+@@ -324,7 +326,9 @@ func (g *Runner) ErrorHandler(ctx *fasthttp.RequestCtx, cause error) {
+ func (g *Runner) metricsHandler() fasthttp.RequestHandler {
+ 
+ 	return func(ctx *fasthttp.RequestCtx) {
++		g.Metrics.Lock()
+ 		resp, err := json.Marshal(g.Metrics.endpointCallCounts)
++		g.Metrics.Unlock()
+ 
+ 		if err == nil {
+ 			ctx.SetBody(resp)
+@@ -338,18 +342,22 @@ func (g *Runner) metricsHandler() fasthttp.RequestHandler {
+ 
+ func (m *Method) Handler() fasthttp.RequestHandler {
+ 
+-	cnt := 0
++	var cnt int64
+ 
+ 	return func(ctx *fasthttp.RequestCtx) {
+ 
+ 		start := time.Now()
+ 
++		m.mu.RLock()
++		scenarioName := m.Name
++		m.mu.RUnlock()
++
+ 		defer func(name string) {
+ 			elapsed := time.Since(start) / time.Millisecond
+-			logger.Info(fmt.Sprintf("[%d] Host: %s | Path: %s | Executed: %s | Elapsed time: %dms", cnt, string(ctx.Host()), string(ctx.Request.URI().Path()), name, elapsed))
+-			cnt++
+-			go m.runner.Metrics.incrementEndpointCallCount(string(ctx.Request.Header.Method()), string(ctx.Request.URI().Path()))
+-		}(m.Name)
++			n := atomic.AddInt64(&cnt, 1) - 1
++			logger.Info(fmt.Sprintf("[%d] Host: %s | Path: %s | Executed: %s | Elapsed time: %dms", n, string(ctx.Host()), string(ctx.Request.URI().Path()), name, elapsed))
++			m.runner.Metrics.incrementEndpointCallCount(string(ctx.Request.Header.Method()), string(ctx.Request.URI().Path()))
++		}(scenarioName)
+ 
+ 		action, done := m.Execute()
+ 
+@@ -377,10 +385,13 @@ func (m *Method) Execute() (Action, []Done) {
+ 
+ 	var done []Done
+ 
+-	e := m.executables
+-	action := m.Accept
++	m.mu.RLock()
++	s := m.Scenario
++	m.mu.RUnlock()
++
++	action := s.Accept
+ 
+-	for _, method := range e {
++	for _, method := range s.executables {
+ 
+ 		d, err := method()
+ 
+@@ -389,14 +400,16 @@ func (m *Method) Execute() (Action, []Done) {
+ 		}
+ 
+ 		if err != nil {
+-			action = m.Ignore
++			action = s.Ignore
+ 			logger.Error(err)
+ 			break
+ 		}
+ 	}
+ 
+ 	if action.scenario != nil {
++		m.mu.Lock()
+ 		m.Scenario = *action.scenario
++		m.mu.Unlock()
+ 	}
+ 
+ 	return action, done
+diff --git a/runner/scenario.go b/runner/scenario.go
+index e2226ec..a1a5dbb 100644
+--- a/runner/scenario.go
++++ b/runner/scenario.go
+@@ -18,13 +18,15 @@ package runner
+ 
+ import (
+ 	"github.com/pkg/errors"
++	"sync"
+ 	"time"
+ )
+ 
+ type Limit struct {
+-	s Scenario
+-	l int
+-	n int
++	s  Scenario
++	l  int
++	n  int
++	mu sync.Mutex
+ }
+ 
+ func NewLimit(s Scenario) *Limit {
+@@ -36,6 +38,8 @@ func NewLimit(s Scenario) *Limit {
+ }
+ 
+ func (l *Limit) Execute() (Done, error) {
++	l.mu.Lock()
++	defer l.mu.Unlock()
+ 
+ 	l.n++
+ 
+@@ -47,9 +51,10 @@ func (l *Limit) Execute() (Done, error) {
+ }
+ 
+ type Rate struct {
+-	s Scenario
+-	r int
+-	n int
++	s  Scenario
++	r  int
++	n  int
++	mu sync.Mutex
+ }
+ 
+ func NewRate(s Scenario) *Rate {
+@@ -61,6 +66,8 @@ func NewRate(s Scenario) *Rate {
+ }
+ 
+ func (r *Rate) Execute() (Done, error) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
+ 
+ 	r.n++
+ 

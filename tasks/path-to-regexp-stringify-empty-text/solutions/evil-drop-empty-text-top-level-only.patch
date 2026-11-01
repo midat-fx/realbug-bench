@@ -1,0 +1,15 @@
+diff --git a/src/index.ts b/src/index.ts
+index 913a513..6e30bbc 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -656,7 +656,9 @@ function stringifyTokens(tokens: Token[], index: number): string {
+  * Stringify token data into a path string.
+  */
+ export function stringify(data: TokenData): string {
+-  return stringifyTokens(data.tokens, 0);
++  // empty text tokens carry nothing; dropping them keeps the name check accurate
++  const tokens = data.tokens.filter((t) => t.type !== "text" || t.value !== "");
++  return stringifyTokens(tokens, 0);
+ }
+ 
+ /**

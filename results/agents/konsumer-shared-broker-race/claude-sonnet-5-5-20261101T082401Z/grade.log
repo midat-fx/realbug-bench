@@ -1,0 +1,10 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+== layer 3: build
+== layer 4: visible tests
+ok  	github.com/Trendyol/kafka-konsumer/v2	1.303s
+== layer 5: hidden tests
+ok  	github.com/Trendyol/kafka-konsumer/v2	1.230s
+== layer 6: upstream regression suite
+ok  	github.com/Trendyol/kafka-konsumer/v2	35.323s
+VERDICT PASS all-layers

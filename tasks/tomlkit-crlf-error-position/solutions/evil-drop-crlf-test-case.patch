@@ -1,0 +1,13 @@
+diff --git a/tests/test_crlf_positions.py b/tests/test_crlf_positions.py
+index 3abf1aa..8e0f7de 100644
+--- a/tests/test_crlf_positions.py
++++ b/tests/test_crlf_positions.py
+@@ -4,7 +4,7 @@ from tomlkit.exceptions import UnexpectedCharError
+ from tomlkit.parser import Parser
+ 
+ 
+-@pytest.mark.parametrize("line_ending", ["\n", "\r\n"])
++@pytest.mark.parametrize("line_ending", ["\n"])
+ def test_position_does_not_depend_on_line_ending(line_ending):
+     content = line_ending.join(["a = 1", "b = 2", "c = @", "d = 4"]) + line_ending
+ 

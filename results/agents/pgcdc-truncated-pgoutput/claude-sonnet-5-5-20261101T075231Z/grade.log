@@ -1,0 +1,42 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+== layer 3: build
+== layer 4: visible tests
+ok  	github.com/Trendyol/go-pq-cdc/pq/message	1.058s
+ok  	github.com/Trendyol/go-pq-cdc/pq/message/format	1.099s
+ok  	github.com/Trendyol/go-pq-cdc/pq/message/tuple	1.040s
+== layer 5: hidden tests
+ok  	github.com/Trendyol/go-pq-cdc/pq/message	1.316s
+ok  	github.com/Trendyol/go-pq-cdc/pq/message/format	1.044s [no tests to run]
+ok  	github.com/Trendyol/go-pq-cdc/pq/message/tuple	1.171s [no tests to run]
+== layer 6: upstream regression suite
+?   	github.com/Trendyol/go-pq-cdc	[no test files]
+ok  	github.com/Trendyol/go-pq-cdc/config	0.022s
+?   	github.com/Trendyol/go-pq-cdc/example/partitioned-snapshot-cdc-regular	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/partitioned-table-mapping	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/replica-identity-nothing	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/replica-identity-using-index	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/replica-read	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/simple	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/simple-column-filtering	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/simple-with-heartbeat	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/snapshot-ctid-partitioning	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/snapshot-initial-mode	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/snapshot-only-mode	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/snapshot-with-query-condition	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/example/visibility-guard	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/internal/http	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/internal/metric	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/internal/retry	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/logger	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/pq	[no test files]
+?   	github.com/Trendyol/go-pq-cdc/pq/heartbeat	[no test files]
+ok  	github.com/Trendyol/go-pq-cdc/pq/message	0.045s
+ok  	github.com/Trendyol/go-pq-cdc/pq/message/format	0.021s
+ok  	github.com/Trendyol/go-pq-cdc/pq/message/tuple	0.006s
+ok  	github.com/Trendyol/go-pq-cdc/pq/publication	0.008s
+ok  	github.com/Trendyol/go-pq-cdc/pq/replication	0.781s
+ok  	github.com/Trendyol/go-pq-cdc/pq/slot	0.008s
+ok  	github.com/Trendyol/go-pq-cdc/pq/snapshot	0.004s
+?   	github.com/Trendyol/go-pq-cdc/pq/timescaledb	[no test files]
+VERDICT PASS all-layers

@@ -1,0 +1,17 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+discarding candidate changes to test files:
+  runner/race_direct_test.go
+== layer 3: build
+== layer 4: visible tests
+ok  	github.com/Trendyol/gaos/runner	1.058s
+== layer 5: hidden tests
+ok  	github.com/Trendyol/gaos/runner	1.370s
+== layer 6: upstream regression suite
+?   	github.com/Trendyol/gaos	[no test files]
+?   	github.com/Trendyol/gaos/cmd	[no test files]
+?   	github.com/Trendyol/gaos/examples	[no test files]
+?   	github.com/Trendyol/gaos/executor	[no test files]
+?   	github.com/Trendyol/gaos/logger	[no test files]
+ok  	github.com/Trendyol/gaos/runner	0.016s
+VERDICT PASS all-layers

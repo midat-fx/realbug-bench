@@ -1,0 +1,1 @@
+{"task":"konsumer-shared-broker-race","agent":"claude","model":"claude-sonnet-5-5","started":"20261101T082621Z","seconds":73,"agent_exit":0,"verdict":"PASS all-layers","turns":8,"cost_usd":0.2379726,"is_error":false,"output_tokens":2800,"cache_read_tokens":306562}

@@ -1,0 +1,64 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..a6daa24 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -698,7 +698,7 @@ export class Parser {
+                 })
+                 return
+               }
+-            } else if (atMapIndent) {
++            } else if (atMapIndent && (it.value || it.sep || it.explicitKey)) {
+               map.items.push({ start })
+             }
+             this.stack.push(bv)
+diff --git a/tests/doc/flow-key-comment.ts b/tests/doc/flow-key-comment.ts
+new file mode 100644
+index 0000000..cf54566
+--- /dev/null
++++ b/tests/doc/flow-key-comment.ts
+@@ -0,0 +1,45 @@
++import * as YAML from 'yaml'
++import { _map, _seq } from '../_utils.ts'
++
++describe('flow collection key after a comment line', () => {
++  test('flow sequence key', () => {
++    const doc = YAML.parseDocument('1: 2\n# note\n[3]: 4')
++    expect(doc.errors).toHaveLength(0)
++    expect(doc.value).toMatchObject(
++      _map([
++        [1, 2],
++        [_seq(3), 4]
++      ])
++    )
++    expect(String(doc)).toContain('# note')
++  })
++
++  test('flow mapping key', () => {
++    const doc = YAML.parseDocument('1: 2\n\n{a: 1}: x')
++    expect(doc.errors).toHaveLength(0)
++    expect(doc.value).toMatchObject(
++      _map([
++        [1, 2],
++        [_map([['a', 1]]), 'x']
++      ])
++    )
++  })
++
++  test('nested block map', () => {
++    const doc = YAML.parseDocument('a:\n  1: 2\n  # c\n\n  [3]: 4\nb: 5')
++    expect(doc.errors).toHaveLength(0)
++    expect(doc.toJS({ mapAsMap: true })).toMatchObject(
++      new Map<unknown, unknown>([
++        [
++          'a',
++          new Map<unknown, unknown>([
++            [1, 2],
++            [[3], 4]
++          ])
++        ],
++        ['b', 5]
++      ])
++    )
++    expect(String(doc)).toContain('# c')
++  })
++})

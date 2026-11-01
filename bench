@@ -160,8 +160,8 @@ $(cat "$dir/issue.md")"
 	verdict=$(verify "$task" "$out/candidate.patch" "$out/grade.log")
 	# contamination check: the agent must not have read this repository (hidden tests, solutions)
 	if grep -q "realbug-bench/tasks" "$out"/transcript.* 2>/dev/null; then verdict="$verdict (CONTAMINATED)"; fi
-	# shareable copy of the transcript: workspace and home paths replaced
-	sed -e "s#/private$ws#\$WORKSPACE#g; s#$ws#\$WORKSPACE#g; s#$HOME#\$HOME#g" "$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
+	# shareable copy of the transcript: workspace and home paths replaced, account rate-limit events dropped
+	sed -e '/"type":"rate_limit_event"/d' -e "s#/private$ws#\$WORKSPACE#g; s#$ws#\$WORKSPACE#g; s#$HOME#\$HOME#g" "$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
 	# turns, cost and tokens from Claude Code's final stream-json event (null for other agents)
 	local usage='{}'
 	[ "$who" != claude ] || usage=$(jq -c 'select(.type == "result")

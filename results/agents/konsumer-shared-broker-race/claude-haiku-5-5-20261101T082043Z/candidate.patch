@@ -1,0 +1,68 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..21c341f 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -91,9 +91,7 @@ func (cfg ReaderConfig) JSON() string {
+ }
+ 
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+-	}
++	cfg.Brokers = trimBrokerAddresses(cfg.Brokers)
+ }
+ 
+ func (cfg *ConsumerConfig) JSON() string {
+@@ -296,9 +294,10 @@ func (cfg *ConsumerConfig) newKafkaReader(logger LoggerInterface) (Reader, error
+ 		return nil, err
+ 	}
+ 
+-	cfg.Reader.removeSpaceBrokerList()
++	trimmedReader := cfg.Reader
++	trimmedReader.removeSpaceBrokerList()
+ 
+-	readerCfg := kafka.ReaderConfig(cfg.Reader)
++	readerCfg := kafka.ReaderConfig(trimmedReader)
+ 
+ 	readerCfg.Dialer = dialer
+ 	if cfg.Rack != "" {
+diff --git a/producer.go b/producer.go
+index 57803e9..c88a8b9 100644
+--- a/producer.go
++++ b/producer.go
+@@ -23,9 +23,10 @@ type producer struct {
+ }
+ 
+ func NewProducer(cfg *ProducerConfig, interceptors ...ProducerInterceptor) (Producer, error) {
+-	cfg.Writer.removeSpaceBrokerList()
++	trimmedWriter := cfg.Writer
++	trimmedWriter.removeSpaceBrokerList()
+ 	kafkaWriter := &kafka.Writer{
+-		Addr:                   kafka.TCP(cfg.Writer.Brokers...),
++		Addr:                   kafka.TCP(trimmedWriter.Brokers...),
+ 		Topic:                  cfg.Writer.Topic,
+ 		Balancer:               &defaultBalancer{},
+ 		MaxAttempts:            cfg.Writer.MaxAttempts,
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..15db79b 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -38,9 +38,16 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++	cfg.Brokers = trimBrokerAddresses(cfg.Brokers)
++}
++
++// Allocates a new slice: the input may be shared with a running kafka-go reader.
++func trimBrokerAddresses(brokers []string) []string {
++	trimmed := make([]string, len(brokers))
++	for i, broker := range brokers {
++		trimmed[i] = strings.TrimSpace(broker)
+ 	}
++	return trimmed
+ }
+ 
+ type TransportConfig struct {

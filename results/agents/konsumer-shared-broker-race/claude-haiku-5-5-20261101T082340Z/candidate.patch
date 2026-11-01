@@ -1,0 +1,66 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..cd83b75 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -91,9 +91,7 @@ func (cfg ReaderConfig) JSON() string {
+ }
+ 
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+-	}
++	cfg.Brokers = trimBrokers(cfg.Brokers)
+ }
+ 
+ func (cfg *ConsumerConfig) JSON() string {
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..bf4e098 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -38,9 +38,15 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++	cfg.Brokers = trimBrokers(cfg.Brokers)
++}
++
++func trimBrokers(brokers []string) []string {
++	trimmed := make([]string, len(brokers))
++	for i, broker := range brokers {
++		trimmed[i] = strings.TrimSpace(broker)
+ 	}
++	return trimmed
+ }
+ 
+ type TransportConfig struct {
+diff --git a/producer_config_test.go b/producer_config_test.go
+index f82cfba..19ba3cf 100644
+--- a/producer_config_test.go
++++ b/producer_config_test.go
+@@ -157,6 +157,24 @@ func TestProducerConfig_removeSpaceBrokerList(t *testing.T) {
+ 	}
+ }
+ 
++func TestNewProducer_does_not_write_shared_broker_slice(t *testing.T) {
++	shared := []string{" 127.0.0.1:9092 ", " 127.0.0.1:9093"}
++
++	p, err := NewProducer(&ProducerConfig{Writer: WriterConfig{Brokers: shared}})
++	if err != nil {
++		t.Fatalf("expected no error, got %v", err)
++	}
++	defer p.Close()
++
++	if shared[0] != " 127.0.0.1:9092 " || shared[1] != " 127.0.0.1:9093" {
++		t.Errorf("shared broker slice must be untouched, got %q", shared)
++	}
++	addr := p.(*producer).w.(*kafka.Writer).Addr.String()
++	if addr != "127.0.0.1:9092,127.0.0.1:9093" {
++		t.Errorf("writer must receive trimmed brokers, got %q", addr)
++	}
++}
++
+ func TestProducerConfig_String(t *testing.T) {
+ 	t.Run("Should_Convert_To_String", func(t *testing.T) {
+ 		// Given

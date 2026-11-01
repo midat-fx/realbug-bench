@@ -1,0 +1,34 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index edea702..5e0a601 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,7 @@
+ 
+ ### Fixed
+ 
++- Fix `ParseError` line and column reporting the wrong position for documents with `\r\n` line endings, where each CRLF line before the error shifted the position by one character.
+ - Fix appending a key to a parsed inline table that uses `", "` separators emitting a bare `","` for the new entry, leaving the table inconsistently spaced (e.g. `{x = 1, y = 2,z = 3}`). ([#595](https://github.com/python-poetry/tomlkit/pull/595))
+ 
+ ## [0.15.1] - 2026-07-17
+diff --git a/tomlkit/source.py b/tomlkit/source.py
+index b2e9caa..a46ca4b 100644
+--- a/tomlkit/source.py
++++ b/tomlkit/source.py
+@@ -230,11 +230,15 @@ class Source(str):
+         return exception(line, col, *args, **kwargs)
+ 
+     def _to_linecol(self) -> tuple[int, int]:
++        lines = self.split("\n")
++        if lines[-1] == "":
++            lines.pop()
++
+         cur = 0
+-        for i, line in enumerate(self.splitlines()):
++        for i, line in enumerate(lines):
+             if cur + len(line) + 1 > self.idx:
+                 return (i + 1, self.idx - cur)
+ 
+             cur += len(line) + 1
+ 
+-        return len(self.splitlines()), 0
++        return len(lines), 0

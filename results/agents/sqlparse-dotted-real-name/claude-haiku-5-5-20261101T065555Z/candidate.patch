@@ -1,0 +1,58 @@
+diff --git a/sqlparse/sql.py b/sqlparse/sql.py
+index 5489f05..0b305bc 100644
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -18,8 +18,11 @@ class NameAliasMixin:
+ 
+     def get_real_name(self):
+         """Returns the real name (object name) of this identifier."""
+-        # a.b
+-        dot_idx, _ = self.token_next_by(m=(T.Punctuation, '.'))
++        # a.b.c -> c
++        dot_idx = None
++        for idx, token in enumerate(self.tokens):
++            if imt(token, m=(T.Punctuation, '.')):
++                dot_idx = idx
+         return self._get_first_name(dot_idx, real_name=True)
+ 
+     def get_alias(self):
+diff --git a/tests/test_qualified_real_name.py b/tests/test_qualified_real_name.py
+new file mode 100644
+index 0000000..607e186
+--- /dev/null
++++ b/tests/test_qualified_real_name.py
+@@ -0,0 +1,34 @@
++import pytest
++
++import sqlparse
++
++
++@pytest.mark.parametrize('sql, expected', [
++    ('"a"."b"."c"', 'c'),
++    ('`a`.`b`.`c`', 'c'),
++    ('[a].[b].[c]', '[c]'),
++    ('"a"."b"."c" x', 'c'),
++    ('warehouse.sales.orders', 'orders'),
++    ('server.db.dbo.table', 'table'),
++])
++def test_real_name_is_last_component(sql, expected):
++    ident = sqlparse.parse(sql)[0].tokens[0]
++    assert ident.get_real_name() == expected
++
++
++def test_real_name_of_qualified_function_call():
++    ident = sqlparse.parse('db.schema.fn(1)')[0].tokens[0]
++    assert ident.get_real_name() == 'fn'
++
++
++def test_parent_name_stays_first_component():
++    ident = sqlparse.parse('server.db.dbo.table')[0].tokens[0]
++    assert ident.get_parent_name() == 'server'
++
++
++def test_alias_of_three_part_name_in_select():
++    stmt = sqlparse.parse('select o.id from db.schema.orders o')[0]
++    ident = stmt.tokens[-1]
++    assert ident.get_real_name() == 'orders'
++    assert ident.get_alias() == 'o'
++    assert ident.get_name() == 'o'

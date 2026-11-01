@@ -1,0 +1,1 @@
+{"task":"konsumer-batch-retry-prebatch","agent":"claude","model":"claude-haiku-5-5","started":"20261101T080414Z","seconds":144,"agent_exit":0,"verdict":"FAIL hidden-tests","turns":17,"cost_usd":1.256517,"is_error":false,"output_tokens":15070,"cache_read_tokens":848614}

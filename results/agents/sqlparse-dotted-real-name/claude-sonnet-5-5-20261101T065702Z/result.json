@@ -1,0 +1,1 @@
+{"task":"sqlparse-dotted-real-name","agent":"claude","model":"claude-sonnet-5-5","started":"20261101T065702Z","seconds":37,"agent_exit":0,"verdict":"PASS all-layers","turns":8,"cost_usd":0.3949662000000001,"is_error":false,"output_tokens":2582,"cache_read_tokens":290114}

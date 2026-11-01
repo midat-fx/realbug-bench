@@ -1,0 +1,43 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..e986a02 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -698,7 +698,15 @@ export class Parser {
+                 })
+                 return
+               }
+-            } else if (atMapIndent) {
++            } else if (
++              atMapIndent &&
++              !(
++                bv.type === 'flow-collection' &&
++                !it.sep &&
++                !it.explicitKey &&
++                !it.value
++              )
++            ) {
+               map.items.push({ start })
+             }
+             this.stack.push(bv)
+diff --git a/tests/doc/flow-key-blank-line.ts b/tests/doc/flow-key-blank-line.ts
+index 2a84d77..4272563 100644
+--- a/tests/doc/flow-key-blank-line.ts
++++ b/tests/doc/flow-key-blank-line.ts
+@@ -12,4 +12,17 @@ describe('flow collection key after a blank line', () => {
+       ])
+     )
+   })
++
++  test('flow sequence key after a comment', () => {
++    const doc = YAML.parseDocument('1: 2\n# note\n[3]: 4')
++    expect(doc.errors).toHaveLength(0)
++    expect(String(doc)).toContain('# note')
++  })
++
++  test('flow map key in nested map after blank line and comment', () => {
++    const doc = YAML.parseDocument('a:\n  1: 2\n\n  # c\n  {b: 1}: 4\nz: 1')
++    expect(doc.errors).toHaveLength(0)
++    expect(String(doc)).toContain('# c')
++    expect(doc.toJS({ mapAsMap: true }).get('z')).toBe(1)
++  })
+ })

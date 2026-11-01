@@ -1,0 +1,236 @@
+diff --git a/runner/method_concurrency_test.go b/runner/method_concurrency_test.go
+new file mode 100644
+index 0000000..ca0c03f
+--- /dev/null
++++ b/runner/method_concurrency_test.go
+@@ -0,0 +1,70 @@
++package runner
++
++import (
++	"sync"
++	"sync/atomic"
++	"testing"
++
++	"github.com/valyala/fasthttp"
++)
++
++func newConcurrencyTestRunner() *Runner {
++	r := &Runner{}
++	r.Metrics.endpointCallCounts = map[string]int{}
++	return r
++}
++
++func TestMethodHandlerIsRaceFreeWhileDirectSwitchesScenario(t *testing.T) {
++	limited := &Scenario{Name: "limited", Rate: 3}
++	limited.executables = []Executable{NewRate(*limited).Execute}
++	other := &Scenario{Name: "other"}
++
++	limited.Accept = Action{Direct: "other", scenario: other, Status: 200, Result: Result{Type: ResultTypeStatic, Content: map[string]interface{}{"a": 1}}}
++	other.Accept = Action{Direct: "limited", scenario: limited, Status: 200, Result: Result{Type: ResultTypeStatic, Content: map[string]interface{}{"b": 2}}}
++
++	method := &Method{Scenario: *limited, runner: newConcurrencyTestRunner()}
++	handler := method.Handler()
++
++	var wg sync.WaitGroup
++	for c := 0; c < 32; c++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			for i := 0; i < 50; i++ {
++				ctx := &fasthttp.RequestCtx{}
++				ctx.Request.SetRequestURI("http://localhost/path")
++				handler(ctx)
++			}
++		}()
++	}
++	wg.Wait()
++}
++
++func TestLimitIsExactUnderConcurrency(t *testing.T) {
++	const limit = 100
++	limiter := NewLimit(Scenario{Limit: limit})
++	var accepted int64
++	var wg sync.WaitGroup
++	for i := 0; i < 1000; i++ {
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			if _, err := limiter.Execute(); err == nil {
++				atomic.AddInt64(&accepted, 1)
++			}
++		}()
++	}
++	wg.Wait()
++
++	sequential := NewLimit(Scenario{Limit: limit})
++	var want int64
++	for i := 0; i < 1000; i++ {
++		if _, err := sequential.Execute(); err == nil {
++			want++
++		}
++	}
++
++	if accepted != want {
++		t.Fatalf("limit %d over 1000 concurrent calls accepted %d, sequential accepted %d", limit, accepted, want)
++	}
++}
+diff --git a/runner/runner.go b/runner/runner.go
+index 93c1460..20feb19 100644
+--- a/runner/runner.go
++++ b/runner/runner.go
+@@ -29,6 +29,7 @@ import (
+ 	"os"
+ 	"os/signal"
+ 	"sync"
++	"sync/atomic"
+ 	"syscall"
+ 	"time"
+ )
+@@ -122,6 +123,7 @@ type Scenario struct {
+ type Method struct {
+ 	Scenario
+ 	runner *Runner
++	mu     sync.RWMutex
+ }
+ 
+ func New(path string) (*Runner, error) {
+@@ -219,7 +221,7 @@ func (g *Runner) runToService(service *Service, name string) bool {
+ 
+ 		if scenario, ok := g.Scenario[value.Scenario]; ok {
+ 
+-			method := Method{*scenario, g}
++			method := Method{Scenario: *scenario, runner: g}
+ 
+ 			r.Handle(value.Method, path, method.Handler())
+ 
+@@ -324,7 +326,9 @@ func (g *Runner) ErrorHandler(ctx *fasthttp.RequestCtx, cause error) {
+ func (g *Runner) metricsHandler() fasthttp.RequestHandler {
+ 
+ 	return func(ctx *fasthttp.RequestCtx) {
++		g.Metrics.Lock()
+ 		resp, err := json.Marshal(g.Metrics.endpointCallCounts)
++		g.Metrics.Unlock()
+ 
+ 		if err == nil {
+ 			ctx.SetBody(resp)
+@@ -338,7 +342,7 @@ func (g *Runner) metricsHandler() fasthttp.RequestHandler {
+ 
+ func (m *Method) Handler() fasthttp.RequestHandler {
+ 
+-	cnt := 0
++	var cnt int64
+ 
+ 	return func(ctx *fasthttp.RequestCtx) {
+ 
+@@ -346,10 +350,10 @@ func (m *Method) Handler() fasthttp.RequestHandler {
+ 
+ 		defer func(name string) {
+ 			elapsed := time.Since(start) / time.Millisecond
+-			logger.Info(fmt.Sprintf("[%d] Host: %s | Path: %s | Executed: %s | Elapsed time: %dms", cnt, string(ctx.Host()), string(ctx.Request.URI().Path()), name, elapsed))
+-			cnt++
++			n := atomic.AddInt64(&cnt, 1) - 1
++			logger.Info(fmt.Sprintf("[%d] Host: %s | Path: %s | Executed: %s | Elapsed time: %dms", n, string(ctx.Host()), string(ctx.Request.URI().Path()), name, elapsed))
+ 			go m.runner.Metrics.incrementEndpointCallCount(string(ctx.Request.Header.Method()), string(ctx.Request.URI().Path()))
+-		}(m.Name)
++		}(m.current().Name)
+ 
+ 		action, done := m.Execute()
+ 
+@@ -373,14 +377,21 @@ func (m *Method) Handler() fasthttp.RequestHandler {
+ 	}
+ }
+ 
++func (m *Method) current() Scenario {
++	m.mu.RLock()
++	defer m.mu.RUnlock()
++
++	return m.Scenario
++}
++
+ func (m *Method) Execute() (Action, []Done) {
+ 
+ 	var done []Done
+ 
+-	e := m.executables
+-	action := m.Accept
++	s := m.current()
++	action := s.Accept
+ 
+-	for _, method := range e {
++	for _, method := range s.executables {
+ 
+ 		d, err := method()
+ 
+@@ -389,14 +400,16 @@ func (m *Method) Execute() (Action, []Done) {
+ 		}
+ 
+ 		if err != nil {
+-			action = m.Ignore
++			action = s.Ignore
+ 			logger.Error(err)
+ 			break
+ 		}
+ 	}
+ 
+ 	if action.scenario != nil {
++		m.mu.Lock()
+ 		m.Scenario = *action.scenario
++		m.mu.Unlock()
+ 	}
+ 
+ 	return action, done
+diff --git a/runner/scenario.go b/runner/scenario.go
+index e2226ec..a1a5dbb 100644
+--- a/runner/scenario.go
++++ b/runner/scenario.go
+@@ -18,13 +18,15 @@ package runner
+ 
+ import (
+ 	"github.com/pkg/errors"
++	"sync"
+ 	"time"
+ )
+ 
+ type Limit struct {
+-	s Scenario
+-	l int
+-	n int
++	s  Scenario
++	l  int
++	n  int
++	mu sync.Mutex
+ }
+ 
+ func NewLimit(s Scenario) *Limit {
+@@ -36,6 +38,8 @@ func NewLimit(s Scenario) *Limit {
+ }
+ 
+ func (l *Limit) Execute() (Done, error) {
++	l.mu.Lock()
++	defer l.mu.Unlock()
+ 
+ 	l.n++
+ 
+@@ -47,9 +51,10 @@ func (l *Limit) Execute() (Done, error) {
+ }
+ 
+ type Rate struct {
+-	s Scenario
+-	r int
+-	n int
++	s  Scenario
++	r  int
++	n  int
++	mu sync.Mutex
+ }
+ 
+ func NewRate(s Scenario) *Rate {
+@@ -61,6 +66,8 @@ func NewRate(s Scenario) *Rate {
+ }
+ 
+ func (r *Rate) Execute() (Done, error) {
++	r.mu.Lock()
++	defer r.mu.Unlock()
+ 
+ 	r.n++
+ 

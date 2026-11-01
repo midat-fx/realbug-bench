@@ -1,0 +1,1 @@
+{"task":"immer-revoked-mapset-reads","agent":"claude","model":"claude-haiku-5-5","started":"20261101T073434Z","seconds":94,"agent_exit":0,"verdict":"PASS all-layers","turns":20,"cost_usd":0.89171,"is_error":false,"output_tokens":10191,"cache_read_tokens":730230}

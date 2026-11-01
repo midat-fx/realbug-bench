@@ -1,0 +1,35 @@
+diff --git a/sqlparse/sql.py b/sqlparse/sql.py
+index 5489f05..2dd4e58 100644
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -18,9 +18,8 @@ class NameAliasMixin:
+ 
+     def get_real_name(self):
+         """Returns the real name (object name) of this identifier."""
+-        # a.b
+-        dot_idx, _ = self.token_next_by(m=(T.Punctuation, '.'))
+-        return self._get_first_name(dot_idx, real_name=True)
++        # a.b.c -> c
++        return self._get_first_name(self._last_dot(), real_name=True)
+ 
+     def get_alias(self):
+         """Returns the alias for this identifier or ``None``."""
+@@ -381,12 +380,16 @@ class TokenList(Token):
+     def get_parent_name(self):
+         """Return name of the parent object if any.
+ 
+-        A parent object is identified by the first occurring dot.
++        A parent object is the qualifier right before the object name.
+         """
+-        dot_idx, _ = self.token_next_by(m=(T.Punctuation, '.'))
++        dot_idx = self._last_dot()
+         _, prev_ = self.token_prev(dot_idx)
+         return remove_quotes(prev_.value) if prev_ is not None else None
+ 
++    def _last_dot(self):
++        dots = [i for i, t in enumerate(self.tokens) if t.match(T.Punctuation, '.')]
++        return dots[-1] if dots else None
++
+     def _get_first_name(self, idx=None, reverse=False, keywords=False,
+                         real_name=False):
+         """Returns the name of the first token with a name"""

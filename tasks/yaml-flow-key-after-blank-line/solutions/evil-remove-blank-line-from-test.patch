@@ -1,0 +1,13 @@
+diff --git a/tests/doc/flow-key-blank-line.ts b/tests/doc/flow-key-blank-line.ts
+index 2a84d77..69b3c99 100644
+--- a/tests/doc/flow-key-blank-line.ts
++++ b/tests/doc/flow-key-blank-line.ts
+@@ -3,7 +3,7 @@ import { _map, _seq } from '../_utils.ts'
+ 
+ describe('flow collection key after a blank line', () => {
+   test('flow sequence key', () => {
+-    const doc = YAML.parseDocument('1: 2\n\n[3]: 4')
++    const doc = YAML.parseDocument('1: 2\n[3]: 4')
+     expect(doc.errors).toHaveLength(0)
+     expect(doc.value).toMatchObject(
+       _map([

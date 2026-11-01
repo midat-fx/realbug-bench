@@ -1,0 +1,1 @@
+{"task":"yaml-flow-key-after-blank-line","agent":"claude","model":"claude-haiku-5-5","started":"20261101T072128Z","seconds":269,"agent_exit":0,"verdict":"PASS all-layers","turns":22,"cost_usd":1.7767435,"is_error":false,"output_tokens":22460,"cache_read_tokens":1208737}

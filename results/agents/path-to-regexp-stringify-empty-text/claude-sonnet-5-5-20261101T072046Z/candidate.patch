@@ -1,0 +1,82 @@
+diff --git a/src/index.spec.ts b/src/index.spec.ts
+index 44d6b05..b012a2d 100644
+--- a/src/index.spec.ts
++++ b/src/index.spec.ts
+@@ -231,6 +231,41 @@ describe("path-to-regexp", () => {
+     });
+   });
+ 
++  describe("stringify empty text tokens", () => {
++    it("should quote names followed by empty text then identifier text", () => {
++      const data = new TokenData([
++        { type: "text", value: "/" },
++        { type: "param", name: "foo" },
++        { type: "text", value: "" },
++        { type: "text", value: "bar" },
++      ]);
++      expect(stringify(data)).toEqual('/:"foo"bar');
++    });
++
++    it("should quote wildcards inside groups", () => {
++      const data = new TokenData([
++        {
++          type: "group",
++          tokens: [
++            { type: "wildcard", name: "foo" },
++            { type: "text", value: "" },
++            { type: "text", value: "bar" },
++          ],
++        },
++      ]);
++      expect(stringify(data)).toEqual('{*"foo"bar}');
++    });
++
++    it("should not quote names followed by empty text then a separator", () => {
++      const data = new TokenData([
++        { type: "param", name: "foo" },
++        { type: "text", value: "" },
++        { type: "text", value: "/bar" },
++      ]);
++      expect(stringify(data)).toEqual(":foo/bar");
++    });
++  });
++
+   describe.each(PARSER_TESTS)(
+     "parse $path with $options",
+     ({ path, options, expected }) => {
+diff --git a/src/index.ts b/src/index.ts
+index 913a513..93d0952 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -637,12 +637,12 @@ function stringifyTokens(tokens: Token[], index: number): string {
+     }
+ 
+     if (token.type === "param") {
+-      value += ":" + stringifyName(token.name, tokens[index]);
++      value += ":" + stringifyName(token.name, nextToken(tokens, index));
+       continue;
+     }
+ 
+     if (token.type === "wildcard") {
+-      value += "*" + stringifyName(token.name, tokens[index]);
++      value += "*" + stringifyName(token.name, nextToken(tokens, index));
+       continue;
+     }
+ 
+@@ -670,6 +670,16 @@ function quoteName(name: string): string {
+   return `"${name.replace(/["\\]/g, "\\$&")}"`;
+ }
+ 
++/**
++ * Find the next token that contributes output, skipping empty text tokens.
++ */
++function nextToken(tokens: Token[], index: number): Token | undefined {
++  while (index < tokens.length) {
++    const token = tokens[index++];
++    if (token.type !== "text" || token.value !== "") return token;
++  }
++}
++
+ /**
+  * Stringify a parameter name, escaping when it cannot be emitted directly.
+  */

@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n bench harness/grade.sh
-      - run: shellcheck -S warning bench harness/grade.sh
+      - run: make lint
 
   tasks:
     runs-on: ubuntu-24.04
@@ -24,10 +23,15 @@ jobs:
           - konsumer-batch-retry-prebatch
           - konsumer-shared-broker-race
           - gaos-scenario-races
+          - sqlparse-dotted-real-name
+          - tomlkit-crlf-error-position
+          - path-to-regexp-stringify-empty-text
+          - yaml-flow-key-after-blank-line
+          - immer-revoked-mapset-reads
     steps:
       - uses: actions/checkout@v4
       # every solution is graded twice: a verdict that changes between runs fails the job as FLAKY
-      - run: RUNS=2 ./bench check ${{ matrix.task }}
+      - run: make test TASKS=${{ matrix.task }}
       - if: always()
         uses: actions/upload-artifact@v4
         with:

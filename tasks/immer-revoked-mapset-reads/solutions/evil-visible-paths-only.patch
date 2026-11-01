@@ -1,0 +1,25 @@
+diff --git a/src/plugins/mapset.ts b/src/plugins/mapset.ts
+index 0cc2158..b5671e6 100644
+--- a/src/plugins/mapset.ts
++++ b/src/plugins/mapset.ts
+@@ -54,10 +54,12 @@ export function enableMapSet() {
+ 		}
+ 
+ 		get size(): number {
++			assertUnrevoked(this[DRAFT_STATE])
+ 			return latest(this[DRAFT_STATE]).size
+ 		}
+ 
+ 		has(key: any): boolean {
++			assertUnrevoked(this[DRAFT_STATE])
+ 			return latest(this[DRAFT_STATE]).has(key)
+ 		}
+ 
+@@ -225,6 +227,7 @@ export function enableMapSet() {
+ 		}
+ 
+ 		get size(): number {
++			assertUnrevoked(this[DRAFT_STATE])
+ 			return latest(this[DRAFT_STATE]).size
+ 		}
+ 

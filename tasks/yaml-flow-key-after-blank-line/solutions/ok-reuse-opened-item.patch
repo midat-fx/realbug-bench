@@ -1,0 +1,18 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..75c3358 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -699,7 +699,12 @@ export class Parser {
+                 return
+               }
+             } else if (atMapIndent) {
+-              map.items.push({ start })
++              // A blank line or comment before this key already opened an
++              // empty item for it; fill that one instead of opening another.
++              const opened =
++                it.key === undefined && !it.sep && !it.explicitKey && !it.value
++              if (opened) it.start.push(...start)
++              else map.items.push({ start })
+             }
+             this.stack.push(bv)
+             return

@@ -1,0 +1,21 @@
+diff --git a/tomlkit/source.py b/tomlkit/source.py
+index b2e9caa..5e256c0 100644
+--- a/tomlkit/source.py
++++ b/tomlkit/source.py
+@@ -230,11 +230,8 @@ class Source(str):
+         return exception(line, col, *args, **kwargs)
+ 
+     def _to_linecol(self) -> tuple[int, int]:
+-        cur = 0
+-        for i, line in enumerate(self.splitlines()):
+-            if cur + len(line) + 1 > self.idx:
+-                return (i + 1, self.idx - cur)
+-
+-            cur += len(line) + 1
+-
+-        return len(self.splitlines()), 0
++        # Lines end with "\n" ("\r\n" also ends in "\n"), so the line is the
++        # number of line feeds before the position and the column is the
++        # distance from the character after the last of them.
++        line_start = self.rfind("\n", 0, self.idx) + 1
++        return self.count("\n", 0, self.idx) + 1, self.idx - line_start

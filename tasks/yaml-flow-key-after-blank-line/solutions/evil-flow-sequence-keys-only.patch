@@ -1,0 +1,21 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..0973b0b 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -698,7 +698,15 @@ export class Parser {
+                 })
+                 return
+               }
+-            } else if (atMapIndent) {
++            } else if (
++              atMapIndent &&
++              !(
++                this.type === 'flow-seq-start' &&
++                !it.sep &&
++                !it.explicitKey &&
++                start.length === 0
++              )
++            ) {
+               map.items.push({ start })
+             }
+             this.stack.push(bv)

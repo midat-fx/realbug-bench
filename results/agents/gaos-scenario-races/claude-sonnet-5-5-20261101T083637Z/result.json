@@ -1,0 +1,1 @@
+{"task":"gaos-scenario-races","agent":"claude","model":"claude-sonnet-5-5","started":"20261101T083637Z","seconds":43,"agent_exit":0,"verdict":"PASS all-layers","turns":7,"cost_usd":0.2430633,"is_error":false,"output_tokens":3309,"cache_read_tokens":281061}

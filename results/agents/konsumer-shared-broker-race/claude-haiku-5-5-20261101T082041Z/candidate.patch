@@ -1,0 +1,131 @@
+diff --git a/consumer_config.go b/consumer_config.go
+index cbcd5a4..4de2ae1 100644
+--- a/consumer_config.go
++++ b/consumer_config.go
+@@ -91,9 +91,7 @@ func (cfg ReaderConfig) JSON() string {
+ }
+ 
+ func (cfg *ReaderConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
+-	}
++	cfg.Brokers = trimBrokerList(cfg.Brokers)
+ }
+ 
+ func (cfg *ConsumerConfig) JSON() string {
+@@ -296,16 +294,17 @@ func (cfg *ConsumerConfig) newKafkaReader(logger LoggerInterface) (Reader, error
+ 		return nil, err
+ 	}
+ 
+-	cfg.Reader.removeSpaceBrokerList()
++	readerCfg := cfg.Reader
++	readerCfg.removeSpaceBrokerList()
+ 
+-	readerCfg := kafka.ReaderConfig(cfg.Reader)
++	kafkaReaderCfg := kafka.ReaderConfig(readerCfg)
+ 
+-	readerCfg.Dialer = dialer
++	kafkaReaderCfg.Dialer = dialer
+ 	if cfg.Rack != "" {
+-		readerCfg.GroupBalancers = []kafka.GroupBalancer{kafka.RackAffinityGroupBalancer{Rack: cfg.Rack}}
++		kafkaReaderCfg.GroupBalancers = []kafka.GroupBalancer{kafka.RackAffinityGroupBalancer{Rack: cfg.Rack}}
+ 	}
+ 
+-	reader := kafka.NewReader(readerCfg)
++	reader := kafka.NewReader(kafkaReaderCfg)
+ 
+ 	if cfg.DistributedTracingEnabled {
+ 		return NewOtelReaderWrapper(cfg, reader)
+diff --git a/producer.go b/producer.go
+index 57803e9..2aa192f 100644
+--- a/producer.go
++++ b/producer.go
+@@ -23,26 +23,27 @@ type producer struct {
+ }
+ 
+ func NewProducer(cfg *ProducerConfig, interceptors ...ProducerInterceptor) (Producer, error) {
+-	cfg.Writer.removeSpaceBrokerList()
++	writerCfg := cfg.Writer
++	writerCfg.removeSpaceBrokerList()
+ 	kafkaWriter := &kafka.Writer{
+-		Addr:                   kafka.TCP(cfg.Writer.Brokers...),
+-		Topic:                  cfg.Writer.Topic,
++		Addr:                   kafka.TCP(writerCfg.Brokers...),
++		Topic:                  writerCfg.Topic,
+ 		Balancer:               &defaultBalancer{},
+-		MaxAttempts:            cfg.Writer.MaxAttempts,
+-		WriteBackoffMin:        cfg.Writer.WriteBackoffMin,
+-		WriteBackoffMax:        cfg.Writer.WriteBackoffMax,
+-		BatchSize:              cfg.Writer.BatchSize,
+-		BatchBytes:             cfg.Writer.BatchBytes,
+-		BatchTimeout:           cfg.Writer.BatchTimeout,
+-		ReadTimeout:            cfg.Writer.ReadTimeout,
+-		WriteTimeout:           cfg.Writer.WriteTimeout,
+-		RequiredAcks:           cfg.Writer.RequiredAcks,
+-		Async:                  cfg.Writer.Async,
+-		Completion:             cfg.Writer.Completion,
+-		Compression:            cfg.Writer.Compression,
+-		Logger:                 cfg.Writer.Logger,
+-		ErrorLogger:            cfg.Writer.ErrorLogger,
+-		AllowAutoTopicCreation: cfg.Writer.AllowAutoTopicCreation,
++		MaxAttempts:            writerCfg.MaxAttempts,
++		WriteBackoffMin:        writerCfg.WriteBackoffMin,
++		WriteBackoffMax:        writerCfg.WriteBackoffMax,
++		BatchSize:              writerCfg.BatchSize,
++		BatchBytes:             writerCfg.BatchBytes,
++		BatchTimeout:           writerCfg.BatchTimeout,
++		ReadTimeout:            writerCfg.ReadTimeout,
++		WriteTimeout:           writerCfg.WriteTimeout,
++		RequiredAcks:           writerCfg.RequiredAcks,
++		Async:                  writerCfg.Async,
++		Completion:             writerCfg.Completion,
++		Compression:            writerCfg.Compression,
++		Logger:                 writerCfg.Logger,
++		ErrorLogger:            writerCfg.ErrorLogger,
++		AllowAutoTopicCreation: writerCfg.AllowAutoTopicCreation,
+ 	}
+ 
+ 	cfg.Logger = NewZapLogger(cfg.LogLevel)
+diff --git a/producer_config.go b/producer_config.go
+index 76c6960..b9b8205 100644
+--- a/producer_config.go
++++ b/producer_config.go
+@@ -3,6 +3,7 @@ package kafka
+ import (
+ 	"fmt"
+ 	"regexp"
++	"slices"
+ 	"strings"
+ 	"time"
+ 
+@@ -38,9 +39,15 @@ func (cfg WriterConfig) JSON() string {
+ }
+ 
+ func (cfg *WriterConfig) removeSpaceBrokerList() {
+-	for i := range cfg.Brokers {
+-		cfg.Brokers[i] = strings.TrimSpace(cfg.Brokers[i])
++	cfg.Brokers = trimBrokerList(cfg.Brokers)
++}
++
++func trimBrokerList(brokers []string) []string {
++	trimmed := slices.Clone(brokers)
++	for i := range trimmed {
++		trimmed[i] = strings.TrimSpace(trimmed[i])
+ 	}
++	return trimmed
+ }
+ 
+ type TransportConfig struct {
+diff --git a/verify_topic.go b/verify_topic.go
+index 43cd16d..04b69c3 100644
+--- a/verify_topic.go
++++ b/verify_topic.go
+@@ -20,7 +20,7 @@ func newKafkaClient(cfg *ConsumerConfig, logger LoggerInterface) (kafkaClient, e
+ 	var err error
+ 	kc := &client{
+ 		Client: &kafka.Client{
+-			Addr: kafka.TCP(cfg.Reader.Brokers...),
++			Addr: kafka.TCP(trimBrokerList(cfg.Reader.Brokers)...),
+ 		},
+ 	}
+ 

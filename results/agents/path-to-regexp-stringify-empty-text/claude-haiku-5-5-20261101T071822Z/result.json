@@ -1,0 +1,1 @@
+{"task":"path-to-regexp-stringify-empty-text","agent":"claude","model":"claude-haiku-5-5","started":"20261101T071822Z","seconds":67,"agent_exit":0,"verdict":"PASS all-layers","turns":11,"cost_usd":0.501253,"is_error":false,"output_tokens":5067,"cache_read_tokens":356066}

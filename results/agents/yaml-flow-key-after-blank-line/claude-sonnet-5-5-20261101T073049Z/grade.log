@@ -1,0 +1,69 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+discarding candidate changes to test files:
+  tests/doc/flow-key-blank-line.ts
+== layer 3: build
+== layer 4: visible tests
+
+ RUN  v4.1.4 /work/repo
+
+ ✓ tests/doc/flow-key-blank-line.ts (1 test) 7ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  07:34:17
+   Duration  786ms (transform 536ms, setup 24ms, import 591ms, tests 7ms, environment 0ms)
+
+== layer 5: hidden tests
+
+ RUN  v4.1.4 /work/repo
+
+(node:124) Warning: Keys with collection values will be stringified due to JS Object restrictions: "[ x ]". Set mapAsMap: true to use a Map instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:124) Warning: Keys with collection values will be stringified due to JS Object restrictions: "[ x ]". Set mapAsMap: true to use a Map instead.
+ ✓ tests/doc/zz-hidden-flow-key.ts (18 tests) 21ms
+
+ Test Files  1 passed (1)
+      Tests  18 passed (18)
+   Start at  07:34:18
+   Duration  834ms (transform 564ms, setup 30ms, import 651ms, tests 21ms, environment 0ms)
+
+== layer 6: upstream regression suite
+
+ RUN  v4.1.4 /work/repo
+
+ ✓ tests/yaml-test-suite.ts (2093 tests | 4 skipped) 1654ms
+ ✓ tests/json-test-suite.ts (340 tests | 7 skipped) 246ms
+ ✓ tests/doc/YAML-1.2.spec.ts (117 tests) 86ms
+ ✓ tests/doc/parse.ts (92 tests) 96ms
+ ✓ tests/doc/stringify.ts (243 tests) 900ms
+ ✓ tests/doc/types.ts (95 tests) 77ms
+ ✓ tests/cli.ts (33 tests) 40ms
+ ✓ tests/properties.ts (1 test) 80ms
+ ✓ tests/visit.ts (36 tests) 31ms
+ ✓ tests/doc/foldFlowLines.ts (35 tests) 26ms
+ ✓ tests/collection-access.ts (32 tests) 19ms
+ ✓ tests/doc/createNode.ts (37 tests) 60ms
+ ✓ tests/doc/anchors.ts (44 tests) 61ms
+ ✓ tests/doc/errors.ts (52 tests) 30ms
+ ✓ tests/compat.ts (9 tests) 17ms
+ ✓ tests/doc/comments.ts (85 tests) 46ms
+ ✓ tests/node-to-js.ts (8 tests) 16ms
+ ✓ tests/directives.ts (8 tests) 10ms
+(node:292) Warning: Keys with collection values will be stringified due to JS Object restrictions: "[ x ]". Set mapAsMap: true to use a Map instead.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:292) Warning: Keys with collection values will be stringified due to JS Object restrictions: "[ x ]". Set mapAsMap: true to use a Map instead.
+ ✓ tests/doc/zz-hidden-flow-key.ts (18 tests) 16ms
+ ✓ tests/line-counter.ts (4 tests) 10ms
+ ✓ tests/doc/YAML-1.1.spec.ts (1 test) 7ms
+ ✓ tests/cst.ts (9 tests) 31ms
+ ✓ tests/clone.ts (5 tests) 14ms
+ ✓ tests/doc/flow-key-blank-line.ts (1 test) 11ms
+ ✓ tests/lexer.ts (8 tests) 7ms
+
+ Test Files  25 passed (25)
+      Tests  3395 passed | 11 skipped (3406)
+   Start at  07:34:21
+   Duration  11.81s (transform 1.30s, setup 202ms, import 4.09s, tests 3.59s, environment 2ms)
+
+VERDICT PASS all-layers

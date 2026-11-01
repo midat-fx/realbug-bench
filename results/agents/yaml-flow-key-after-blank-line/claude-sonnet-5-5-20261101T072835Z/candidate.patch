@@ -1,0 +1,39 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..0ade7e2 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -698,7 +698,10 @@ export class Parser {
+                 })
+                 return
+               }
+-            } else if (atMapIndent) {
++            } else if (
++              atMapIndent &&
++              (it.sep || it.explicitKey || it.value || it.key !== undefined)
++            ) {
+               map.items.push({ start })
+             }
+             this.stack.push(bv)
+diff --git a/tests/doc/parse.ts b/tests/doc/parse.ts
+index 1364d0a..c389cc3 100644
+--- a/tests/doc/parse.ts
++++ b/tests/doc/parse.ts
+@@ -951,3 +951,18 @@ describe('stringKeys', () => {
+     expect(doc.errors).toMatchObject([{ code: 'NON_STRING_KEY' }])
+   })
+ })
++
++describe('flow collection key after blank line or comment', () => {
++  for (const [src, comment] of [
++    ['1: 2\n\n[3]: 4', ''],
++    ['1: 2\n# note\n[3]: 4', '# note'],
++    ['a:\n  1: 2\n\n  {a: 1}: x\n  z: 1\n', ''],
++    ['- 1: 2\n  # note\n  [3]: 4\n', '# note']
++  ]) {
++    test(JSON.stringify(src), () => {
++      const doc = YAML.parseDocument(src)
++      expect(doc.errors).toHaveLength(0)
++      expect(String(doc)).toContain(comment)
++    })
++  }
++})

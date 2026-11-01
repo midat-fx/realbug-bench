@@ -1,0 +1,43 @@
+diff --git a/src/index.ts b/src/index.ts
+index 913a513..c089c6a 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -637,12 +637,12 @@ function stringifyTokens(tokens: Token[], index: number): string {
+     }
+ 
+     if (token.type === "param") {
+-      value += ":" + stringifyName(token.name, tokens[index]);
++      value += ":" + stringifyName(token.name, tokens, index);
+       continue;
+     }
+ 
+     if (token.type === "wildcard") {
+-      value += "*" + stringifyName(token.name, tokens[index]);
++      value += "*" + stringifyName(token.name, tokens, index);
+       continue;
+     }
+ 
+@@ -673,16 +673,19 @@ function quoteName(name: string): string {
+ /**
+  * Stringify a parameter name, escaping when it cannot be emitted directly.
+  */
+-function stringifyName(name: string, next: Token | undefined): string {
++function stringifyName(name: string, tokens: Token[], index: number): string {
+   if (!ID.test(name)) return quoteName(name);
+ 
+-  if (next?.type === "text") {
++  for (let i = index; i < tokens.length; i++) {
++    const token = tokens[i];
++    if (token.type !== "text") return name;
++
+     // Destructuring reads the first *code point*, matching `parse`, which
+     // iterates the path with `[...str]`. Indexing with `[0]` would read only the
+     // leading surrogate of an astral character, missing that the parser treats
+     // the whole character as `ID_Continue` and absorbs it into the name.
+-    const [first = ""] = next.value;
+-    if (ID_CONTINUE.test(first)) return quoteName(name);
++    const [first = ""] = token.value;
++    if (first) return ID_CONTINUE.test(first) ? quoteName(name) : name;
+   }
+ 
+   return name;

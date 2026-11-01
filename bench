@@ -96,6 +96,9 @@ workspace() {
 		[ ! -e "$ws" ] || die "$ws already exists"
 		git clone --quiet "$UPSTREAM" "$ws"
 		git -C "$ws" checkout --quiet -B task "$BASE_COMMIT"
+		# test-data submodules the suites need (task.env SUBMODULES), as in the task image
+		# shellcheck disable=SC2086
+		[ -z "${SUBMODULES:-}" ] || git -C "$ws" submodule update --quiet --init --depth 1 $SUBMODULES
 		git -C "$ws" remote remove origin
 		cp -R "$dir/tests/visible/." "$ws/"
 		git -C "$ws" add -A

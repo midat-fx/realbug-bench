@@ -1,0 +1,13 @@
+diff --git a/tomlkit/parser.py b/tomlkit/parser.py
+index 8c7b1a6..aedf052 100644
+--- a/tomlkit/parser.py
++++ b/tomlkit/parser.py
+@@ -102,7 +102,7 @@ class Parser:
+ 
+     def __init__(self, string: str | bytes) -> None:
+         # Input to parse
+-        self._src = Source(decode(string))
++        self._src = Source(decode(string).replace("\r\n", "\n"))
+ 
+         self._aot_stack: list[Key] = []
+         self._nesting_depth = 0

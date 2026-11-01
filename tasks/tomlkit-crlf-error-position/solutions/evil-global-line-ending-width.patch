@@ -1,0 +1,20 @@
+diff --git a/tomlkit/source.py b/tomlkit/source.py
+index b2e9caa..ffffd62 100644
+--- a/tomlkit/source.py
++++ b/tomlkit/source.py
+@@ -230,11 +230,13 @@ class Source(str):
+         return exception(line, col, *args, **kwargs)
+ 
+     def _to_linecol(self) -> tuple[int, int]:
++        # CRLF documents use two characters per line break
++        eol = 2 if "\r\n" in self else 1
+         cur = 0
+         for i, line in enumerate(self.splitlines()):
+-            if cur + len(line) + 1 > self.idx:
++            if cur + len(line) + eol > self.idx:
+                 return (i + 1, self.idx - cur)
+ 
+-            cur += len(line) + 1
++            cur += len(line) + eol
+ 
+         return len(self.splitlines()), 0

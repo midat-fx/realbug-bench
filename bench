@@ -125,7 +125,9 @@ agent() {
 		mkdir "$out" 2>/dev/null && break
 		sleep 1
 	done
-	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}/realbug-${out##*/}-$task"
+	# no trailing slash: macOS TMPDIR has one, and a "//" path would slip past the transcript sanitizer
+	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}"
+	ws="${ws%/}/realbug-${out##*/}-$task"
 	workspace "$task" "$ws"
 	local prompt
 	prompt="You are working in a $(. "$dir/task.env"; echo "$LANGUAGE" | sed 's/^go$/Go/;s/^cpp$/C++/;s/^python$/Python/;s/^typescript$/TypeScript/') repository. Resolve the following GitHub issue by changing the code.

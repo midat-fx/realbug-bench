@@ -1,0 +1,15 @@
+diff --git a/src/compose/resolve-block-map.ts b/src/compose/resolve-block-map.ts
+index f750be2..721e1ff 100644
+--- a/src/compose/resolve-block-map.ts
++++ b/src/compose/resolve-block-map.ts
+@@ -152,8 +152,8 @@ export function resolveBlockMap(
+     }
+   }
+ 
+-  if (commentEnd && commentEnd < offset)
+-    onError(commentEnd, 'IMPOSSIBLE', 'Map comment with trailing content')
++  // A comment-only item followed by more entries (e.g. a comment or blank line
++  // before a flow-collection key) is not an error: keep the comment on the map.
+   map.range = [bm.offset, offset, commentEnd ?? offset]
+   return map
+ }

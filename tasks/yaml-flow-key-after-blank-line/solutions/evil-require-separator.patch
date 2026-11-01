@@ -1,0 +1,13 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..e0ff88d 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -698,7 +698,7 @@ export class Parser {
+                 })
+                 return
+               }
+-            } else if (atMapIndent) {
++            } else if (atMapIndent && it.sep) {
+               map.items.push({ start })
+             }
+             this.stack.push(bv)

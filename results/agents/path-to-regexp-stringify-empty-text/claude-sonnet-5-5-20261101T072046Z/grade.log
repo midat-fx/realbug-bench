@@ -1,0 +1,39 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+discarding candidate changes to test files:
+  src/index.spec.ts
+== layer 3: build
+== layer 4: visible tests
+
+ RUN  v3.2.7 /work/repo
+
+ ✓ src/stringify-empty-text.spec.ts (1 test) 6ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  07:21:23
+   Duration  531ms (transform 189ms, setup 0ms, collect 152ms, tests 6ms, environment 0ms, prepare 137ms)
+
+== layer 5: hidden tests
+
+ RUN  v3.2.7 /work/repo
+
+ ✓ src/zz-hidden-stringify-empty-text.spec.ts (32 tests) 7ms
+
+ Test Files  1 passed (1)
+      Tests  32 passed (32)
+   Start at  07:21:25
+   Duration  415ms (transform 112ms, setup 0ms, collect 111ms, tests 7ms, environment 0ms, prepare 77ms)
+
+== layer 6: upstream regression suite
+
+ RUN  v3.2.7 /work/repo
+
+ ✓ src/index.spec.ts (383 tests) 258ms
+
+ Test Files  1 passed (1)
+      Tests  383 passed (383)
+   Start at  07:21:26
+   Duration  706ms (transform 198ms, setup 0ms, collect 196ms, tests 258ms, environment 0ms, prepare 77ms)
+
+VERDICT PASS all-layers

@@ -1,0 +1,202 @@
+diff --git a/pq/message/format/begin.go b/pq/message/format/begin.go
+index 0ce7a03..fb3a52e 100644
+--- a/pq/message/format/begin.go
++++ b/pq/message/format/begin.go
+@@ -25,8 +25,8 @@ func NewBegin(data []byte) (*Begin, error) {
+ func (b *Begin) decode(data []byte) error {
+ 	skipByte := 1
+ 
+-	if len(data) < 20 {
+-		return errors.Newf("begin message length must be at least 20 byte, but got %d", len(data))
++	if len(data) < 21 {
++		return errors.Newf("begin message length must be at least 21 byte, but got %d", len(data))
+ 	}
+ 
+ 	b.FinalLSN = pq.LSN(binary.BigEndian.Uint64(data[skipByte:]))
+diff --git a/pq/message/format/commit.go b/pq/message/format/commit.go
+index 7d03140..bb306bb 100644
+--- a/pq/message/format/commit.go
++++ b/pq/message/format/commit.go
+@@ -26,8 +26,8 @@ func NewCommit(data []byte) (*Commit, error) {
+ func (c *Commit) decode(data []byte) error {
+ 	skipByte := 1
+ 
+-	if len(data) < 25 {
+-		return errors.Newf("commit message length must be at least 25 byte, but got %d", len(data))
++	if len(data) < 26 {
++		return errors.Newf("commit message length must be at least 26 byte, but got %d", len(data))
+ 	}
+ 
+ 	c.Flags = data[skipByte]
+diff --git a/pq/message/format/relation.go b/pq/message/format/relation.go
+index 4d3307a..5adc906 100644
+--- a/pq/message/format/relation.go
++++ b/pq/message/format/relation.go
+@@ -55,10 +55,14 @@ func (m *Relation) decode(data []byte, streamedTransaction bool) error {
+ 
+ 	m.Name, usedByteCount = decodeString(data[skipByte:])
+ 	if usedByteCount < 0 {
+-		return errors.New("relation message namespace decode error")
++		return errors.New("relation message name decode error")
+ 	}
+ 	skipByte += usedByteCount
+ 
++	if len(data)-skipByte < 3 {
++		return errors.Newf("relation message replica identity and column count missing, got %d byte", len(data)-skipByte)
++	}
++
+ 	m.ReplicaID = data[skipByte]
+ 	skipByte++
+ 
+@@ -68,6 +72,9 @@ func (m *Relation) decode(data []byte, streamedTransaction bool) error {
+ 	m.Columns = make([]tuple.RelationColumn, m.ColumnNumbers)
+ 	for i := range m.Columns {
+ 		col := tuple.RelationColumn{}
++		if len(data)-skipByte < 1 {
++			return errors.Newf("relation message columns[%d] is truncated", i)
++		}
+ 		col.Flags = data[skipByte]
+ 		skipByte++
+ 
+@@ -77,6 +84,9 @@ func (m *Relation) decode(data []byte, streamedTransaction bool) error {
+ 		}
+ 		skipByte += usedByteCount
+ 
++		if len(data)-skipByte < 8 {
++			return errors.Newf("relation message columns[%d] data type and type modifier are truncated", i)
++		}
+ 		col.DataType = binary.BigEndian.Uint32(data[skipByte:])
+ 		skipByte += 4
+ 
+diff --git a/pq/message/format/truncate.go b/pq/message/format/truncate.go
+index ba8afab..d0be29e 100644
+--- a/pq/message/format/truncate.go
++++ b/pq/message/format/truncate.go
+@@ -63,7 +63,7 @@ func (m *Truncate) decode(data []byte, streamedTransaction bool) error {
+ 	m.Options = data[skipByte]
+ 	skipByte++
+ 
+-	if len(data) < skipByte+(relationCount*4) {
++	if len(data)-skipByte < relationCount*4 {
+ 		return errors.Newf("truncate message relation IDs length must be %d byte, but got %d", relationCount*4, len(data)-skipByte)
+ 	}
+ 
+diff --git a/pq/message/format/update.go b/pq/message/format/update.go
+index 317fc51..6917c5a 100644
+--- a/pq/message/format/update.go
++++ b/pq/message/format/update.go
+@@ -103,6 +103,9 @@ func (m *Update) decode(data []byte, streamedTransaction bool) error {
+ 			for i, col := range m.NewTupleData.Columns {
+ 				// because toasted columns not sent until the toasted column updated
+ 				if col.DataType == tuple.DataTypeToast {
++					if i >= len(m.OldTupleData.Columns) {
++						return errors.Newf("update message old tuple has %d columns, but toasted column %d is referenced", len(m.OldTupleData.Columns), i)
++					}
+ 					m.NewTupleData.Columns[i] = m.OldTupleData.Columns[i]
+ 				}
+ 			}
+diff --git a/pq/message/message.go b/pq/message/message.go
+index 180bac9..b1e3cce 100644
+--- a/pq/message/message.go
++++ b/pq/message/message.go
+@@ -40,6 +40,10 @@ type Type uint8
+ // StreamCommit/StreamAbort messages this function returns) — it must NOT be
+ // process-global, since one process may run several replication streams.
+ func New(data []byte, streamedTransaction bool, serverTime time.Time, relation map[uint32]*format.Relation) (any, error) {
++	if len(data) == 0 {
++		return nil, errors.New("message length must be at least 1 byte, but got 0")
++	}
++
+ 	switch Type(data[0]) {
+ 	case BeginByte:
+ 		return format.NewBegin(data)
+@@ -63,10 +67,11 @@ func New(data []byte, streamedTransaction bool, serverTime time.Time, relation m
+ 		return format.NewStreamCommit(data)
+ 	case RelationByte:
+ 		msg, err := format.NewRelation(data, streamedTransaction)
+-		if err == nil {
+-			relation[msg.OID] = msg
++		if err != nil {
++			return nil, err
+ 		}
+-		return msg, err
++		relation[msg.OID] = msg
++		return msg, nil
+ 	default:
+ 		return nil, errors.Wrap(ErrorByteNotSupported, string(data[0]))
+ 	}
+diff --git a/pq/message/tuple/data.go b/pq/message/tuple/data.go
+index c8ec08d..1317554 100644
+--- a/pq/message/tuple/data.go
++++ b/pq/message/tuple/data.go
+@@ -38,22 +38,34 @@ type RelationColumn struct {
+ }
+ 
+ func NewData(data []byte, tupleDataType uint8, skipByteLength int) (*Data, error) {
++	if skipByteLength < 0 || skipByteLength >= len(data) {
++		return nil, errors.Newf("tuple data length must be at least %d byte, but got %d", skipByteLength+1, len(data))
++	}
+ 	if data[skipByteLength] != tupleDataType {
+ 		return nil, errors.New("invalid tuple data type: " + string(data[skipByteLength]))
+ 	}
+ 	skipByteLength++
+ 
+ 	d := &Data{}
+-	d.Decode(data, skipByteLength)
++	if err := d.Decode(data, skipByteLength); err != nil {
++		return nil, err
++	}
+ 
+ 	return d, nil
+ }
+ 
+-func (d *Data) Decode(data []byte, skipByteLength int) {
++func (d *Data) Decode(data []byte, skipByteLength int) error {
++	if skipByteLength < 0 || len(data)-skipByteLength < 2 {
++		return errors.Newf("tuple data length must be at least %d byte for column count, but got %d", skipByteLength+2, len(data))
++	}
+ 	d.ColumnNumber = binary.BigEndian.Uint16(data[skipByteLength:])
+ 	skipByteLength += 2
+ 
+-	for range d.ColumnNumber {
++	d.Columns = make(DataColumns, 0, min(int(d.ColumnNumber), len(data)-skipByteLength))
++	for i := range d.ColumnNumber {
++		if skipByteLength >= len(data) {
++			return errors.Newf("tuple data length is too short for column %d: got %d byte", i, len(data))
++		}
+ 		col := new(DataColumn)
+ 		col.DataType = data[skipByteLength]
+ 		skipByteLength++
+@@ -61,9 +73,16 @@ func (d *Data) Decode(data []byte, skipByteLength int) {
+ 		switch col.DataType {
+ 		case DataTypeNull, DataTypeToast:
+ 		case DataTypeText, DataTypeBinary:
++			if len(data)-skipByteLength < 4 {
++				return errors.Newf("tuple data length is too short for column %d length prefix: got %d byte", i, len(data))
++			}
+ 			col.Length = binary.BigEndian.Uint32(data[skipByteLength:])
+ 			skipByteLength += 4
+ 
++			if uint64(col.Length) > uint64(len(data)-skipByteLength) {
++				return errors.Newf("tuple data length is too short for column %d: need %d byte, but got %d", i, col.Length, len(data)-skipByteLength)
++			}
++
+ 			col.Data = make([]byte, int(col.Length))
+ 			copy(col.Data, data[skipByteLength:])
+ 
+@@ -73,10 +92,15 @@ func (d *Data) Decode(data []byte, skipByteLength int) {
+ 		d.Columns = append(d.Columns, col)
+ 	}
+ 	d.SkipByte = skipByteLength
++
++	return nil
+ }
+ 
+ func (d *Data) DecodeWithColumn(columns []RelationColumn) (map[string]any, error) {
+ 	decoded := make(map[string]any, d.ColumnNumber)
++	if len(d.Columns) > len(columns) {
++		return nil, errors.Newf("tuple has %d columns, but relation has %d", len(d.Columns), len(columns))
++	}
+ 	for idx, col := range d.Columns {
+ 		colName := columns[idx].Name
+ 		switch col.DataType {

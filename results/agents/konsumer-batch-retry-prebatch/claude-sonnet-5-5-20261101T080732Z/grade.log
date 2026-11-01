@@ -1,0 +1,50 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+== layer 3: build
+== layer 4: visible tests
+ok  	github.com/Trendyol/kafka-konsumer/v2	1.052s
+== layer 5: hidden tests
+--- FAIL: TestHiddenRetryWithoutDeadLetterProducerKeepsRetrying (0.00s)
+    zz_hidden_batch_retry_test.go:153: without a dead letter producer the consume error must be returned, got dead letter producer is not configured, message will be retried
+{"level":"WARN","time":"2026-11-01T08:09:34.786Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 1/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:34.887Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 2/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:35.088Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 3/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:35.488Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 4/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:36.29Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 5/5): broker unavailable"}
+{"level":"ERROR","time":"2026-11-01T08:09:37.892Z","sourceLocation":"repo/batch_consumer.go:106","message":"Error producing messages to dead letter topic. Error: broker unavailable"}
+--- FAIL: TestHiddenRetryWithoutDeadLetterProducerKeepsRetrying (0.00s)
+    zz_hidden_batch_retry_test.go:153: without a dead letter producer the consume error must be returned, got dead letter producer is not configured, message will be retried
+{"level":"WARN","time":"2026-11-01T08:09:37.938Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 1/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:38.038Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 2/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:38.239Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 3/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:38.64Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 4/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:39.442Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 5/5): broker unavailable"}
+{"level":"ERROR","time":"2026-11-01T08:09:41.046Z","sourceLocation":"repo/batch_consumer.go:106","message":"Error producing messages to dead letter topic. Error: broker unavailable"}
+--- FAIL: TestHiddenRetryWithoutDeadLetterProducerKeepsRetrying (0.00s)
+    zz_hidden_batch_retry_test.go:153: without a dead letter producer the consume error must be returned, got dead letter producer is not configured, message will be retried
+{"level":"WARN","time":"2026-11-01T08:09:41.13Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 1/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:41.23Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 2/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:41.431Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 3/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:41.832Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 4/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:42.638Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 5/5): broker unavailable"}
+{"level":"ERROR","time":"2026-11-01T08:09:44.246Z","sourceLocation":"repo/batch_consumer.go:106","message":"Error producing messages to dead letter topic. Error: broker unavailable"}
+--- FAIL: TestHiddenRetryWithoutDeadLetterProducerKeepsRetrying (0.01s)
+    zz_hidden_batch_retry_test.go:153: without a dead letter producer the consume error must be returned, got dead letter producer is not configured, message will be retried
+{"level":"WARN","time":"2026-11-01T08:09:44.318Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 1/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:44.419Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 2/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:44.621Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 3/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:45.026Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 4/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:45.83Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 5/5): broker unavailable"}
+{"level":"ERROR","time":"2026-11-01T08:09:47.441Z","sourceLocation":"repo/batch_consumer.go:106","message":"Error producing messages to dead letter topic. Error: broker unavailable"}
+--- FAIL: TestHiddenRetryWithoutDeadLetterProducerKeepsRetrying (0.00s)
+    zz_hidden_batch_retry_test.go:153: without a dead letter producer the consume error must be returned, got dead letter producer is not configured, message will be retried
+{"level":"WARN","time":"2026-11-01T08:09:47.544Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 1/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:47.645Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 2/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:47.846Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 3/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:48.246Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 4/5): broker unavailable"}
+{"level":"WARN","time":"2026-11-01T08:09:49.048Z","sourceLocation":"repo/consumer_base.go:339","message":"Error producing messages to dead letter topic (attempt 5/5): broker unavailable"}
+{"level":"ERROR","time":"2026-11-01T08:09:50.651Z","sourceLocation":"repo/batch_consumer.go:106","message":"Error producing messages to dead letter topic. Error: broker unavailable"}
+FAIL
+FAIL	github.com/Trendyol/kafka-konsumer/v2	15.958s
+FAIL
+VERDICT FAIL hidden-tests

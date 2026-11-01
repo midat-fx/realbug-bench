@@ -1,0 +1,48 @@
+diff --git a/src/index.ts b/src/index.ts
+index 913a513..0e40b9b 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -637,12 +637,12 @@ function stringifyTokens(tokens: Token[], index: number): string {
+     }
+ 
+     if (token.type === "param") {
+-      value += ":" + stringifyName(token.name, tokens[index]);
++      value += ":" + stringifyName(token.name, tokens, index);
+       continue;
+     }
+ 
+     if (token.type === "wildcard") {
+-      value += "*" + stringifyName(token.name, tokens[index]);
++      value += "*" + stringifyName(token.name, tokens, index);
+       continue;
+     }
+ 
+@@ -671,18 +671,24 @@ function quoteName(name: string): string {
+ }
+ 
+ /**
+- * Stringify a parameter name, escaping when it cannot be emitted directly.
++ * Stringify a parameter name, escaping when the text that follows it would
++ * otherwise be read back as part of the name.
+  */
+-function stringifyName(name: string, next: Token | undefined): string {
++function stringifyName(name: string, tokens: Token[], index: number): string {
+   if (!ID.test(name)) return quoteName(name);
+ 
+-  if (next?.type === "text") {
++  while (index < tokens.length) {
++    const token = tokens[index++];
++    if (token.type !== "text") break;
++    if (!token.value) continue;
++
+     // Destructuring reads the first *code point*, matching `parse`, which
+     // iterates the path with `[...str]`. Indexing with `[0]` would read only the
+     // leading surrogate of an astral character, missing that the parser treats
+     // the whole character as `ID_Continue` and absorbs it into the name.
+-    const [first = ""] = next.value;
++    const [first = ""] = token.value;
+     if (ID_CONTINUE.test(first)) return quoteName(name);
++    break;
+   }
+ 
+   return name;

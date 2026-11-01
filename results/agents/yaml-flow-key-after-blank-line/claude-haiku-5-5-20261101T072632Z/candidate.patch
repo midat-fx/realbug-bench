@@ -1,0 +1,52 @@
+diff --git a/src/parse/parser.ts b/src/parse/parser.ts
+index 1443cc1..cfad545 100644
+--- a/src/parse/parser.ts
++++ b/src/parse/parser.ts
+@@ -698,7 +698,7 @@ export class Parser {
+                 })
+                 return
+               }
+-            } else if (atMapIndent) {
++            } else if (atMapIndent && (atNextItem || it.value)) {
+               map.items.push({ start })
+             }
+             this.stack.push(bv)
+diff --git a/tests/doc/flow-key-blank-line.ts b/tests/doc/flow-key-blank-line.ts
+index 2a84d77..eae5c3c 100644
+--- a/tests/doc/flow-key-blank-line.ts
++++ b/tests/doc/flow-key-blank-line.ts
+@@ -12,4 +12,34 @@ describe('flow collection key after a blank line', () => {
+       ])
+     )
+   })
++
++  test('flow sequence key after a comment line', () => {
++    const doc = YAML.parseDocument('1: 2\n# note\n[3]: 4')
++    expect(doc.errors).toHaveLength(0)
++    expect(doc.value).toMatchObject(
++      _map([
++        [1, 2],
++        [_seq(3), 4]
++      ])
++    )
++    expect(String(doc)).toBe('1: 2\n# note\n? [ 3 ]\n: 4\n')
++  })
++
++  test('flow mapping key after a blank line', () => {
++    const doc = YAML.parseDocument('1: 2\n\n{a: 1}: x')
++    expect(doc.errors).toHaveLength(0)
++    expect(String(doc)).toBe('1: 2\n\n? { a: 1 }\n: x\n')
++  })
++
++  test('nested flow sequence key after a blank line', () => {
++    const doc = YAML.parseDocument('a:\n  1: 2\n\n  [3]: 4')
++    expect(doc.errors).toHaveLength(0)
++    expect(String(doc)).toBe('a:\n  1: 2\n\n  ? [ 3 ]\n  : 4\n')
++  })
++
++  test('anchored flow sequence key after a blank line', () => {
++    const doc = YAML.parseDocument('1: 2\n\n&x [3]: 4')
++    expect(doc.errors).toHaveLength(0)
++    expect(String(doc)).toBe('1: 2\n\n? &x [ 3 ]\n: 4\n')
++  })
+ })

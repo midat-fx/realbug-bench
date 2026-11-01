@@ -10,7 +10,7 @@ least **two different valid solutions** it must accept. CI grades all of them on
 and fails if any verdict is wrong or changes between runs.
 
 ```bash
-make test                # lint the harness, grade every solution of every task twice (needs Docker)
+make test                # lint and leak-scan the harness, grade every solution of every task twice (needs Docker)
 make test TASKS=immer-revoked-mapset-reads   # one task
 ./bench report           # table of every recorded agent run
 ```
@@ -238,7 +238,7 @@ tasks have no Codex runs.
 
 ```
 bench                       driver: check | verify | workspace | agent | report | build
-Makefile                    make test (lint + check), make report
+Makefile                    make test (lint + scan + check), make scan, make report
 harness/grade.sh            verifier, runs inside the task container
 docs/DESIGN.md              why the bench is built this way
 tasks/<id>/
@@ -262,7 +262,14 @@ Other commands:
 ./bench verify <task> <patch>        # grade any patch
 ./bench workspace <task> <dir>       # what an agent gets: upstream at the base commit + visible tests
 ./bench agent <task> claude|codex    # run an agent headless on the task and grade its diff
+./bench scan [<git range>]           # leak scan; with a range, also the commits' identities
 ```
+
+`./bench scan` fails if a tracked file, gzipped transcripts included, contains a local home path,
+a token or key, or an account rate-limit event from Claude Code's stream. I run it before every
+push with `SCAN_EXTRA` set to my own address, so that pattern stays out of the repository. CI runs
+it on every push, and on pull requests also checks that each new commit has a noreply author and
+committer and no co-author or generator lines.
 
 ## License
 

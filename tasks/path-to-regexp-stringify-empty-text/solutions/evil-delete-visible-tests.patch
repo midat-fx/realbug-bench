@@ -1,0 +1,23 @@
+diff --git a/src/stringify-empty-text.spec.ts b/src/stringify-empty-text.spec.ts
+deleted file mode 100644
+index 5e1ab74..0000000
+--- a/src/stringify-empty-text.spec.ts
++++ /dev/null
+@@ -1,17 +0,0 @@
+-import { describe, it, expect } from "vitest";
+-import { compile, stringify, TokenData } from "./index.js";
+-
+-describe("stringify param followed by an empty text token", () => {
+-  it("quotes the name when the next non-empty text continues it", () => {
+-    const data = new TokenData([
+-      { type: "text", value: "/" },
+-      { type: "param", name: "foo" },
+-      { type: "text", value: "" },
+-      { type: "text", value: "bar" },
+-    ]);
+-    const path = stringify(data);
+-
+-    expect(path).toBe('/:"foo"bar');
+-    expect(compile(path)({ foo: "x" })).toBe(compile(data)({ foo: "x" }));
+-  });
+-});

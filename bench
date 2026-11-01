@@ -7,6 +7,7 @@
 #   ./bench agent <task> <agent>      run a coding agent (claude|codex) on a task, grade its diff
 #   ./bench report                    markdown table of every agent run in results/agents
 #   ./bench build <task>              build the task image
+#   ./bench scan [range]              leak scan of tracked files (and of the commits in a git range)
 #
 # Expected verdicts come from file names: reference.patch and ok-*.patch must PASS, evil-*.patch must FAIL.
 # --hostname localhost: without a network the container hostname does not resolve, and testsuite services bind to it.
@@ -161,7 +162,7 @@ $(cat "$dir/issue.md")"
 	# contamination check: the agent must not have read this repository (hidden tests, solutions)
 	if grep -q "realbug-bench/tasks" "$out"/transcript.* 2>/dev/null; then verdict="$verdict (CONTAMINATED)"; fi
 	# shareable copy of the transcript: workspace and home paths replaced, account rate-limit events dropped
-	sed -e '/"type":"rate_limit_event"/d' -e "s#/private$ws#\$WORKSPACE#g; s#$ws#\$WORKSPACE#g; s#$HOME#\$HOME#g" "$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
+	sed -e '/"type":"rate_limit_even[t]"/d' -e "s#/private$ws#\$WORKSPACE#g; s#$ws#\$WORKSPACE#g; s#$HOME#\$HOME#g" "$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
 	# turns, cost and tokens from Claude Code's final stream-json event (null for other agents)
 	local usage='{}'
 	[ "$who" != claude ] || usage=$(jq -c 'select(.type == "result")
@@ -183,6 +184,30 @@ report() {
 	done | sort | cut -f2-
 }
 
+# Tracked files, gz transcripts decompressed, must not carry local paths, credentials or account
+# events. SCAN_EXTRA (an extended regex) adds private patterns, e.g. a personal address, that should
+# not be written into this repository. With a range, the commits in it must have noreply authors and
+# committers and no co-author or generator lines.
+scan() {
+	# "even[t]": the patterns must not match this file itself
+	local pat='/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"type":"rate_limit_even[t]"'
+	[ -z "${SCAN_EXTRA:-}" ] || pat="$pat|$SCAN_EXTRA"
+	local bad=0 f
+	while IFS= read -r -d '' f; do
+		case "$f" in *.gz) gzip -dc "$ROOT/$f" ;; *) cat "$ROOT/$f" ;; esac | grep -a -q -E "$pat" || continue
+		echo "leak: $f"
+		bad=1
+	done < <(git -C "$ROOT" ls-files -z)
+	if [ -n "${1:-}" ]; then
+		# GitHub's own merge commits are committed by noreply@github.com
+		git -C "$ROOT" log --format='%h %ae%n%h %ce' "$1" | grep -v -E ' ([0-9]+\+)?[^ @]+@users\.noreply\.github\.com$| noreply@github\.com$' \
+			| sed 's/^/non-noreply identity: /' | grep . && bad=1
+		git -C "$ROOT" log --format='%h %B' "$1" | grep -i -E '^(co-authored-by:|.*generated with)' \
+			| sed 's/^/signature line: /' | grep . && bad=1
+	fi
+	return $bad
+}
+
 cmd=${1:-}
 shift || true
 case "$cmd" in
@@ -192,5 +217,6 @@ workspace) [ $# -eq 2 ] || die "usage: bench workspace <task> <dir>"; workspace 
 agent) [ $# -eq 2 ] || die "usage: bench agent <task> <claude|codex>"; agent "$1" "$2" ;;
 report) report ;;
 build) build "$1" ;;
-*) sed -n '2,12p' "$0"; exit 2 ;;
+scan) scan "$@" ;;
+*) sed -n '2,13p' "$0"; exit 2 ;;
 esac

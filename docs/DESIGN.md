@@ -142,3 +142,9 @@ during development, the hidden tests were extended rather than the evil dropped:
   whether a pass is repeatable and stay within the budget of 60 runs (9 tasks x 2 models x 3 = 54).
 - **Cost** is the `total_cost_usd` Claude Code reports in its final event. Runs used a subscription,
   so it is an API-price equivalent, not money spent.
+- **Verdicts are not revised after the fact.** The first sweep showed that the
+  `konsumer-batch-retry-prebatch` issue under-specifies one case (which error the callback returns
+  when there is no dead letter producer), and the hidden test is stricter than the text. Changing the
+  test or the issue and re-grading would tune the bench to the results it had already seen. The
+  numbers stay as graded; a clarified issue would be a new version of the task, with its own runs
+  reported separately.

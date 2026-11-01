@@ -1,0 +1,46 @@
+diff --git a/sqlparse/sql.py b/sqlparse/sql.py
+index 5489f05..dd74a36 100644
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -18,8 +18,16 @@ class NameAliasMixin:
+ 
+     def get_real_name(self):
+         """Returns the real name (object name) of this identifier."""
+-        # a.b
+-        dot_idx, _ = self.token_next_by(m=(T.Punctuation, '.'))
++        # a.b, a.b.c, ...: the name after the last dot of the dotted chain
++        dot_idx = None
++        for idx, tok in enumerate(self.tokens):
++            if tok.match(T.Punctuation, '.'):
++                dot_idx = idx
++            elif tok.is_whitespace and dot_idx is not None:
++                _, nxt = self.token_next(idx)
++                if dot_idx != idx - 1 and not (
++                        nxt is not None and nxt.match(T.Punctuation, '.')):
++                    break
+         return self._get_first_name(dot_idx, real_name=True)
+ 
+     def get_alias(self):
+diff --git a/tests/test_parse.py b/tests/test_parse.py
+index 34800cb..fc55e26 100644
+--- a/tests/test_parse.py
++++ b/tests/test_parse.py
+@@ -623,3 +623,18 @@ def test_json_operators(sql):
+     assert len(p) == 1
+     assert len(p[0].tokens) == 1
+     assert p[0].tokens[0].ttype == sqlparse.tokens.Operator
++
++
++@pytest.mark.parametrize('sql, real, parent', [
++    ('db.schema.orders', 'orders', 'db'),
++    ('db.schema.orders o', 'orders', 'db'),
++    ('"a"."b"."c"', 'c', 'a'),
++    ('`a`.`b`.`c` AS x', 'c', 'a'),
++    ('a.b.c.d', 'd', 'a'),
++    ('db.schema.fn(1)', 'fn', 'db'),
++    ('a.b', 'b', 'a'),
++])
++def test_get_real_name_dotted(sql, real, parent):
++    p = sqlparse.parse(sql)[0].tokens[0]
++    assert p.get_real_name() == real
++    assert p.get_parent_name() == parent

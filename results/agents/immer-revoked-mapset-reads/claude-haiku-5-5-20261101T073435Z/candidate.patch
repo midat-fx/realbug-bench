@@ -1,0 +1,119 @@
+diff --git a/src/plugins/mapset.ts b/src/plugins/mapset.ts
+index 0cc2158..ea73635 100644
+--- a/src/plugins/mapset.ts
++++ b/src/plugins/mapset.ts
+@@ -54,11 +54,15 @@ export function enableMapSet() {
+ 		}
+ 
+ 		get size(): number {
+-			return latest(this[DRAFT_STATE]).size
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).size
+ 		}
+ 
+ 		has(key: any): boolean {
+-			return latest(this[DRAFT_STATE]).has(key)
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).has(key)
+ 		}
+ 
+ 		set(key: any, value: any) {
+@@ -76,12 +80,12 @@ export function enableMapSet() {
+ 		}
+ 
+ 		delete(key: any): boolean {
+-			if (!this.has(key)) {
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			if (!latest(state).has(key)) {
+ 				return false
+ 			}
+ 
+-			const state: MapState = this[DRAFT_STATE]
+-			assertUnrevoked(state)
+ 			prepareMapCopy(state)
+ 			markChanged(state)
+ 			if (state.base_.has(key)) {
+@@ -109,6 +113,7 @@ export function enableMapSet() {
+ 
+ 		forEach(cb: (value: any, key: any, self: any) => void, thisArg?: any) {
+ 			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
+ 			latest(state).forEach((_value: any, key: any, _map: any) => {
+ 				cb.call(thisArg, this.get(key), key, this)
+ 			})
+@@ -132,7 +137,9 @@ export function enableMapSet() {
+ 		}
+ 
+ 		keys(): IterableIterator<any> {
+-			return latest(this[DRAFT_STATE]).keys()
++			const state: MapState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return guardIterator(state, latest(state).keys())
+ 		}
+ 
+ 		values(): IterableIterator<any> {
+@@ -187,6 +194,18 @@ export function enableMapSet() {
+ 		return iterator
+ 	}
+ 
++	function guardIterator<T>(
++		state: ImmerState,
++		iterator: Iterator<T>
++	): IterableIterator<T> {
++		return iteratorFrom({
++			next: () => {
++				assertUnrevoked(state)
++				return iterator.next()
++			}
++		})
++	}
++
+ 	function proxyMap_<T extends AnyMap>(
+ 		target: T,
+ 		parent?: ImmerState
+@@ -225,7 +244,9 @@ export function enableMapSet() {
+ 		}
+ 
+ 		get size(): number {
+-			return latest(this[DRAFT_STATE]).size
++			const state: SetState = this[DRAFT_STATE]
++			assertUnrevoked(state)
++			return latest(state).size
+ 		}
+ 
+ 		has(value: any): boolean {
+@@ -254,12 +275,12 @@ export function enableMapSet() {
+ 		}
+ 
+ 		delete(value: any): any {
++			const state: SetState = this[DRAFT_STATE]
++			assertUnrevoked(state)
+ 			if (!this.has(value)) {
+ 				return false
+ 			}
+ 
+-			const state: SetState = this[DRAFT_STATE]
+-			assertUnrevoked(state)
+ 			prepareSetCopy(state)
+ 			markChanged(state)
+ 			return (
+@@ -284,14 +305,14 @@ export function enableMapSet() {
+ 			const state: SetState = this[DRAFT_STATE]
+ 			assertUnrevoked(state)
+ 			prepareSetCopy(state)
+-			return state.copy_!.values()
++			return guardIterator(state, state.copy_!.values())
+ 		}
+ 
+ 		entries(): IterableIterator<[any, any]> {
+ 			const state: SetState = this[DRAFT_STATE]
+ 			assertUnrevoked(state)
+ 			prepareSetCopy(state)
+-			return state.copy_!.entries()
++			return guardIterator(state, state.copy_!.entries())
+ 		}
+ 
+ 		keys(): IterableIterator<any> {

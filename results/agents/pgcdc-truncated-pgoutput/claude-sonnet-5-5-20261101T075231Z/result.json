@@ -1,0 +1,1 @@
+{"task":"pgcdc-truncated-pgoutput","agent":"claude","model":"claude-sonnet-5-5","started":"20261101T075231Z","seconds":60,"agent_exit":0,"verdict":"PASS all-layers","turns":12,"cost_usd":0.40893179999999996,"is_error":false,"output_tokens":6486,"cache_read_tokens":480466}

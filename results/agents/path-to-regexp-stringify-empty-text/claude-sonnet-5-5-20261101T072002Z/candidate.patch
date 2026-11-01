@@ -1,0 +1,37 @@
+diff --git a/src/index.ts b/src/index.ts
+index 913a513..17094b4 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -637,12 +637,12 @@ function stringifyTokens(tokens: Token[], index: number): string {
+     }
+ 
+     if (token.type === "param") {
+-      value += ":" + stringifyName(token.name, tokens[index]);
++      value += ":" + stringifyName(token.name, nextToken(tokens, index));
+       continue;
+     }
+ 
+     if (token.type === "wildcard") {
+-      value += "*" + stringifyName(token.name, tokens[index]);
++      value += "*" + stringifyName(token.name, nextToken(tokens, index));
+       continue;
+     }
+ 
+@@ -652,6 +652,17 @@ function stringifyTokens(tokens: Token[], index: number): string {
+   return value;
+ }
+ 
++/**
++ * Find the next token that contributes output, skipping empty text tokens.
++ */
++function nextToken(tokens: Token[], index: number): Token | undefined {
++  while (index < tokens.length) {
++    const token = tokens[index++];
++    if (token.type !== "text" || token.value !== "") return token;
++  }
++  return undefined;
++}
++
+ /**
+  * Stringify token data into a path string.
+  */

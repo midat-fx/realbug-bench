@@ -1,0 +1,59 @@
+diff --git a/batch_consumer.go b/batch_consumer.go
+index ace2a2d..ac0ece4 100644
+--- a/batch_consumer.go
++++ b/batch_consumer.go
+@@ -63,11 +63,50 @@ func newBatchConsumer(cfg *ConsumerConfig) (Consumer, error) {
+ func (b *batchConsumer) runKonsumerFn(message kcronsumer.Message) error {
+ 	msgList := []*Message{toMessage(message)}
+ 
+-	err := b.consumeFn(msgList)
+-	if msgList[0].ErrDescription != "" {
+-		err = errors.New(msgList[0].ErrDescription)
++	if b.preBatchFn != nil {
++		msgList = b.preBatchFn(msgList)
++		if len(msgList) == 0 {
++			return nil
++		}
++	}
++
++	consumeErr := b.consumeFn(msgList)
++
++	var deadLetterMessages []Message
++	var retryErr error
++	for _, msg := range msgList {
++		if msg == nil || (consumeErr == nil && msg.ErrDescription == "") {
++			continue
++		}
++		if msg.SendDirectToDeadLetter {
++			errMsg := getErrorMessage(consumeErr, msg)
++			msg.AddHeader(Header{Key: errMessageKey, Value: []byte(errMsg)})
++			msg.Topic = "" // we set on initialize for dead letter producer
++			deadLetterMessages = append(deadLetterMessages, *msg)
++			if retryErr == nil {
++				retryErr = errors.New(errMsg)
++			}
++			continue
++		}
++		if msg.ErrDescription != "" {
++			return errors.New(msg.ErrDescription)
++		}
++		return consumeErr
++	}
++
++	if len(deadLetterMessages) == 0 {
++		return nil
++	}
++
++	if b.deadLetterProducer == nil {
++		return retryErr
++	}
++	if err := b.sendToDeadLetterWithBackoff(deadLetterMessages...); err != nil {
++		b.logger.Errorf("Error producing messages to dead letter topic from retry path: %v", err)
++		return retryErr
+ 	}
+-	return err
++	b.metric.IncrementTotalUnprocessedMessagesCounter(int64(len(deadLetterMessages)))
++	return nil
+ }
+ 
+ func (b *batchConsumer) GetMetricCollectors() []prometheus.Collector {

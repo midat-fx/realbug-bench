@@ -1,0 +1,1 @@
+{"task":"tomlkit-crlf-error-position","agent":"claude","model":"claude-sonnet-5-5","started":"20261101T070955Z","seconds":47,"agent_exit":0,"verdict":"PASS all-layers","turns":7,"cost_usd":0.2359101,"is_error":false,"output_tokens":4092,"cache_read_tokens":268307}

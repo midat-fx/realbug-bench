@@ -1,0 +1,1 @@
+{"task":"konsumer-shared-broker-race","agent":"claude","model":"claude-haiku-5-5","started":"20261101T082041Z","seconds":144,"agent_exit":0,"verdict":"PASS all-layers","turns":20,"cost_usd":1.2747675,"is_error":false,"output_tokens":17276,"cache_read_tokens":738435}

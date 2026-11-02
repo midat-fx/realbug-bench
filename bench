@@ -8,6 +8,7 @@
 #   ./bench report                    markdown table of every agent run in results/agents
 #   ./bench build <task>              build the task image
 #   ./bench scan [range]              leak scan of tracked files (and of the commits in a git range)
+#   ./bench sanitize <workspace>      shareable copy of a transcript, stdin to stdout
 #
 # Expected verdicts come from file names: reference.patch and ok-*.patch must PASS, evil-*.patch must FAIL.
 # --hostname localhost: without a network the container hostname does not resolve, and testsuite services bind to it.
@@ -126,9 +127,7 @@ agent() {
 		mkdir "$out" 2>/dev/null && break
 		sleep 1
 	done
-	# no trailing slash: macOS TMPDIR has one, and a "//" path would slip past the transcript sanitizer
-	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}"
-	ws="${ws%/}/realbug-${out##*/}-$task"
+	ws="${AGENT_WORKDIR:-${TMPDIR:-/tmp}}/realbug-${out##*/}-$task"
 	workspace "$task" "$ws"
 	local prompt
 	prompt="You are working in a $(. "$dir/task.env"; echo "$LANGUAGE" | sed 's/^go$/Go/;s/^cpp$/C++/;s/^python$/Python/;s/^typescript$/TypeScript/') repository. Resolve the following GitHub issue by changing the code.
@@ -161,8 +160,7 @@ $(cat "$dir/issue.md")"
 	verdict=$(verify "$task" "$out/candidate.patch" "$out/grade.log")
 	# contamination check: the agent must not have read this repository (hidden tests, solutions)
 	if grep -q "realbug-bench/tasks" "$out"/transcript.* 2>/dev/null; then verdict="$verdict (CONTAMINATED)"; fi
-	# shareable copy of the transcript: workspace and home paths replaced, account rate-limit events dropped
-	sed -e '/"type":"rate_limit_even[t]"/d' -e "s#/private$ws#\$WORKSPACE#g; s#$ws#\$WORKSPACE#g; s#$HOME#\$HOME#g" "$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
+	sanitize "$ws" <"$out/transcript.jsonl" | gzip -9n >"$out/transcript.jsonl.gz"
 	# turns, cost and tokens from Claude Code's final stream-json event (null for other agents)
 	local usage='{}'
 	[ "$who" != claude ] || usage=$(jq -c 'select(.type == "result")
@@ -173,6 +171,16 @@ $(cat "$dir/issue.md")"
 		--argjson seconds $((end - start)) --argjson agent_exit "$rc" --arg verdict "$verdict" --argjson usage "${usage:-{\}}" \
 		'{$task, $agent, $model, $started, $seconds, $agent_exit, $verdict} + $usage' | tee "$out/result.json"
 	[ "${KEEP_WORKSPACE:-0}" = 1 ] || rm -rf "$ws"
+}
+
+# Shareable transcript (stdin to stdout): the workspace path in every spelling tools print it
+# (macOS /private prefix, the doubled slash of a TMPDIR that ends in "/") and $HOME are replaced,
+# and account rate-limit events are dropped ("even[t]" keeps ./bench scan from matching this line).
+sanitize() {
+	local ere='s/[]\.*^$+?(){}|[]/\\&/g' ws home
+	ws=$(printf %s "${1%/}" | tr -s / | sed -E "$ere; s#/#/+#g")
+	home=$(printf %s "$HOME" | sed -E "$ere")
+	sed -E -e '/"type":"rate_limit_even[t]"/d' -e "s#(/private)?$ws#\$WORKSPACE#g; s#$home#\$HOME#g"
 }
 
 # One row per agent run, oldest first.
@@ -218,5 +226,6 @@ agent) [ $# -eq 2 ] || die "usage: bench agent <task> <claude|codex>"; agent "$1
 report) report ;;
 build) build "$1" ;;
 scan) scan "$@" ;;
-*) sed -n '2,13p' "$0"; exit 2 ;;
+sanitize) [ $# -eq 1 ] || die "usage: bench sanitize <workspace> <transcript"; sanitize "$1" ;;
+*) sed -n '2,14p' "$0"; exit 2 ;;
 esac

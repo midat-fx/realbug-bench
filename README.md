@@ -10,7 +10,7 @@ least **two different valid solutions** it must accept. CI grades all of them on
 and fails if any verdict is wrong or changes between runs.
 
 ```bash
-make test                # lint and leak-scan the harness, grade every solution of every task twice (needs Docker)
+make test                # lint, leak-scan and self-test the harness, grade every solution of every task twice (needs Docker)
 make test TASKS=immer-revoked-mapset-reads   # one task
 ./bench report           # table of every recorded agent run
 ```
@@ -237,9 +237,10 @@ tasks have no Codex runs.
 ## Layout
 
 ```
-bench                       driver: check | verify | workspace | agent | report | build
-Makefile                    make test (lint + scan + check), make scan, make report
+bench                       driver: check | verify | workspace | agent | report | build | scan | sanitize
+Makefile                    make test (lint + scan + selftest + check), make report
 harness/grade.sh            verifier, runs inside the task container
+harness/test-sanitize.sh    self-test of the transcript sanitizer (make selftest)
 docs/DESIGN.md              why the bench is built this way
 tasks/<id>/
   issue.md                  the problem statement the agent gets
@@ -263,6 +264,7 @@ Other commands:
 ./bench workspace <task> <dir>       # what an agent gets: upstream at the base commit + visible tests
 ./bench agent <task> claude|codex    # run an agent headless on the task and grade its diff
 ./bench scan [<git range>]           # leak scan; with a range, also the commits' identities
+./bench sanitize <workspace> <in >out   # shareable copy of a raw agent transcript
 ```
 
 `./bench scan` fails if a tracked file, gzipped transcripts included, contains a local home path,

@@ -270,8 +270,11 @@ Other commands:
 `./bench scan` fails if a tracked file, gzipped transcripts included, contains a local home path,
 a token or key, or an account rate-limit event from Claude Code's stream. I run it before every
 push with `SCAN_EXTRA` set to my own address, so that pattern stays out of the repository. CI runs
-it on every push, and on pull requests also checks that each new commit has a noreply author and
-committer and no co-author or generator lines.
+it on every push. On pull requests it also checks that every new commit has me, Midat Faizov, as
+both author and committer, with the same name and address as the base branch (`SCAN_IDENTITY`
+overrides that), and has no co-author or generator lines. A merge through GitHub's web button
+fails this check, because GitHub records itself as the committer, so I merge by fast-forwarding
+locally.
 
 ## License
 

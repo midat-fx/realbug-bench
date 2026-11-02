@@ -194,8 +194,9 @@ report() {
 
 # Tracked files, gz transcripts decompressed, must not carry local paths, credentials or account
 # events. SCAN_EXTRA (an extended regex) adds private patterns, e.g. a personal address, that should
-# not be written into this repository. With a range, the commits in it must have noreply authors and
-# committers and no co-author or generator lines.
+# not be written into this repository. With a range (base..head), every commit in it must have
+# SCAN_IDENTITY ("Name <address>") as author and committer, by default the base commit's author, and
+# no co-author or generator lines. A GitHub web merge (committer noreply@github.com) fails it.
 scan() {
 	# "even[t]": the patterns must not match this file itself
 	local pat='/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"type":"rate_limit_even[t]"'
@@ -207,9 +208,10 @@ scan() {
 		bad=1
 	done < <(git -C "$ROOT" ls-files -z)
 	if [ -n "${1:-}" ]; then
-		# GitHub's own merge commits are committed by noreply@github.com
-		git -C "$ROOT" log --format='%h %ae%n%h %ce' "$1" | grep -v -E ' ([0-9]+\+)?[^ @]+@users\.noreply\.github\.com$| noreply@github\.com$' \
-			| sed 's/^/non-noreply identity: /' | grep . && bad=1
+		local want=${SCAN_IDENTITY:-$(git -C "$ROOT" log -1 --format='%an <%ae>' "${1%%..*}")}
+		git -C "$ROOT" log --format='%h %an <%ae>%n%h %cn <%ce>' "$1" \
+			| awk -v want="$want" '{ h = $1; sub(/^[^ ]+ /, "") } $0 != want { print "identity: " h " " $0 " (want " want ")" }' \
+			| grep . && bad=1
 		git -C "$ROOT" log --format='%h %B' "$1" | grep -i -E '^(co-authored-by:|.*generated with)' \
 			| sed 's/^/signature line: /' | grep . && bad=1
 	fi

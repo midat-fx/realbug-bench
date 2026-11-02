@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # the PR's commits, for the identity check below
-      - run: make lint scan
+      - run: make lint scan selftest
       # every commit a PR adds: noreply author and committer, no co-author or generator lines
       - if: github.event_name == 'pull_request'
         run: ./bench scan "origin/${{ github.base_ref }}..${{ github.event.pull_request.head.sha }}"

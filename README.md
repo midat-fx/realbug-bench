@@ -160,6 +160,9 @@ tasks was graded 3 times locally, every solution of the Python and TypeScript ta
 | `evil-autoenv-only-for-none` | FAIL hidden-tests | hides an empty `envvar` in the help, but falls back to the automatic `PREFIX_NAME` variable only for `None`, unlike the runtime lookup |
 | `evil-tests-expect-old-output` | FAIL visible-tests | rewrites the visible tests to expect the current output |
 
+The grader output of both `RUNS=2 ./bench check` runs of these six solutions (2026-11-03) is in
+[results/checks/click-show-envvar-sequence/](results/checks/click-show-envvar-sequence/), one verdict per run in `verdicts.tsv`.
+
 **path-to-regexp-stringify-empty-text**
 
 | Solution | Verdict | What it does |

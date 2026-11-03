@@ -1,0 +1,87 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+== layer 3: build
+== layer 4: visible tests
+..                                                                       [100%]
+2 passed in 0.01s
+== layer 5: hidden tests
+..F.F.......F....................                                        [100%]
+=================================== FAILURES ===================================
+_________ test_hidden_missing_option_hint[envvar2- (env var: 'UNITS')] _________
+
+runner = <click.testing.CliRunner object at 0xf3bc7c9fe600>, envvar = ('UNITS',)
+hint = " (env var: 'UNITS')"
+
+    @pytest.mark.parametrize(
+        ("envvar", "hint"),
+        [
+            ("UNITS", " (env var: 'UNITS')"),
+            (["UNITS"], " (env var: 'UNITS')"),
+            (("UNITS",), " (env var: 'UNITS')"),
+            (["WEATHER_UNITS", "UNITS"], " (env var: 'WEATHER_UNITS', 'UNITS')"),
+            (("WEATHER_UNITS", "UNITS"), " (env var: 'WEATHER_UNITS', 'UNITS')"),
+            (["A", "B", "C"], " (env var: 'A', 'B', 'C')"),
+            ("MY UNITS", " (env var: 'MY UNITS')"),
+        ],
+    )
+    def test_hidden_missing_option_hint(runner, envvar, hint):
+>       assert f"Error: Missing option '--units'{hint}." in missing(runner, envvar)
+E       assert "Error: Missing option '--units' (env var: 'UNITS')." in "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Missing option '--units' (env var: '('UNITS',)').\n"
+E        +  where "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Missing option '--units' (env var: '('UNITS',)').\n" = missing(<click.testing.CliRunner object at 0xf3bc7c9fe600>, ('UNITS',))
+
+tests/test_zz_hidden_show_envvar.py:37: AssertionError
+_ test_hidden_missing_option_hint[envvar4- (env var: 'WEATHER_UNITS', 'UNITS')] _
+
+runner = <click.testing.CliRunner object at 0xf3bc7c9fe840>
+envvar = ('WEATHER_UNITS', 'UNITS')
+hint = " (env var: 'WEATHER_UNITS', 'UNITS')"
+
+    @pytest.mark.parametrize(
+        ("envvar", "hint"),
+        [
+            ("UNITS", " (env var: 'UNITS')"),
+            (["UNITS"], " (env var: 'UNITS')"),
+            (("UNITS",), " (env var: 'UNITS')"),
+            (["WEATHER_UNITS", "UNITS"], " (env var: 'WEATHER_UNITS', 'UNITS')"),
+            (("WEATHER_UNITS", "UNITS"), " (env var: 'WEATHER_UNITS', 'UNITS')"),
+            (["A", "B", "C"], " (env var: 'A', 'B', 'C')"),
+            ("MY UNITS", " (env var: 'MY UNITS')"),
+        ],
+    )
+    def test_hidden_missing_option_hint(runner, envvar, hint):
+>       assert f"Error: Missing option '--units'{hint}." in missing(runner, envvar)
+E       assert "Error: Missing option '--units' (env var: 'WEATHER_UNITS', 'UNITS')." in "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Missing option '--units' (env var: '('WEATHER_UNITS', 'UNITS')').\n"
+E        +  where "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Missing option '--units' (env var: '('WEATHER_UNITS', 'UNITS')').\n" = missing(<click.testing.CliRunner object at 0xf3bc7c9fe840>, ('WEATHER_UNITS', 'UNITS'))
+
+tests/test_zz_hidden_show_envvar.py:37: AssertionError
+_______ test_hidden_invalid_value_hint[envvar0- (env var: 'COUNT', 'N')] _______
+
+runner = <click.testing.CliRunner object at 0xf3bc7c9ffad0>
+envvar = ('COUNT', 'N'), hint = " (env var: 'COUNT', 'N')"
+
+    @pytest.mark.parametrize(
+        ("envvar", "hint"),
+        [
+            (("COUNT", "N"), " (env var: 'COUNT', 'N')"),
+            (["COUNT"], " (env var: 'COUNT')"),
+            ([], ""),
+            ("", ""),
+        ],
+    )
+    def test_hidden_invalid_value_hint(runner, envvar, hint):
+        option = click.Option(["-c", "--count"], type=int, envvar=envvar, show_envvar=True)
+        result = runner.invoke(click.Command("cli", params=[option]), ["--count", "x"])
+        assert result.exit_code == 2
+>       assert f"Invalid value for '-c' / '--count'{hint}: 'x' is not a valid integer." in (
+            result.output
+        )
+E       assert "Invalid value for '-c' / '--count' (env var: 'COUNT', 'N'): 'x' is not a valid integer." in "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Invalid value for '-c' / '--count' (env var: '('COUNT', 'N')'): 'x' is not a valid integer.\n"
+E        +  where "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Invalid value for '-c' / '--count' (env var: '('COUNT', 'N')'): 'x' is not a valid integer.\n" = <Result SystemExit(2)>.output
+
+tests/test_zz_hidden_show_envvar.py:66: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_zz_hidden_show_envvar.py::test_hidden_missing_option_hint[envvar2- (env var: 'UNITS')]
+FAILED tests/test_zz_hidden_show_envvar.py::test_hidden_missing_option_hint[envvar4- (env var: 'WEATHER_UNITS', 'UNITS')]
+FAILED tests/test_zz_hidden_show_envvar.py::test_hidden_invalid_value_hint[envvar0- (env var: 'COUNT', 'N')]
+3 failed, 30 passed in 0.08s
+VERDICT FAIL hidden-tests

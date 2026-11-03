@@ -1,0 +1,54 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+== layer 3: build
+== layer 4: visible tests
+..                                                                       [100%]
+2 passed in 0.01s
+== layer 5: hidden tests
+......................FFF........                                        [100%]
+=================================== FAILURES ===================================
+___________ test_hidden_help_empty_envvar_uses_auto_prefix[envvar1] ____________
+
+runner = <click.testing.CliRunner object at 0xe83b2b5bf530>, envvar = []
+
+    @pytest.mark.parametrize("envvar", [None, [], (), ""])
+    def test_hidden_help_empty_envvar_uses_auto_prefix(runner, envvar):
+>       assert "  --units TEXT  [env var: WEATHER_UNITS]\n" in help_text(
+            runner, envvar, prefix="WEATHER"
+        )
+E       AssertionError: assert '  --units TEXT  [env var: WEATHER_UNITS]\n' in 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT\n  --help        Show this message and exit.\n'
+E        +  where 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT\n  --help        Show this message and exit.\n' = help_text(<click.testing.CliRunner object at 0xe83b2b5bf530>, [], prefix='WEATHER')
+
+tests/test_zz_hidden_show_envvar.py:86: AssertionError
+___________ test_hidden_help_empty_envvar_uses_auto_prefix[envvar2] ____________
+
+runner = <click.testing.CliRunner object at 0xe83b2bacf140>, envvar = ()
+
+    @pytest.mark.parametrize("envvar", [None, [], (), ""])
+    def test_hidden_help_empty_envvar_uses_auto_prefix(runner, envvar):
+>       assert "  --units TEXT  [env var: WEATHER_UNITS]\n" in help_text(
+            runner, envvar, prefix="WEATHER"
+        )
+E       AssertionError: assert '  --units TEXT  [env var: WEATHER_UNITS]\n' in 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT\n  --help        Show this message and exit.\n'
+E        +  where 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT\n  --help        Show this message and exit.\n' = help_text(<click.testing.CliRunner object at 0xe83b2bacf140>, (), prefix='WEATHER')
+
+tests/test_zz_hidden_show_envvar.py:86: AssertionError
+_______________ test_hidden_help_empty_envvar_uses_auto_prefix[] _______________
+
+runner = <click.testing.CliRunner object at 0xe83b2b5bef60>, envvar = ''
+
+    @pytest.mark.parametrize("envvar", [None, [], (), ""])
+    def test_hidden_help_empty_envvar_uses_auto_prefix(runner, envvar):
+>       assert "  --units TEXT  [env var: WEATHER_UNITS]\n" in help_text(
+            runner, envvar, prefix="WEATHER"
+        )
+E       AssertionError: assert '  --units TEXT  [env var: WEATHER_UNITS]\n' in 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT\n  --help        Show this message and exit.\n'
+E        +  where 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT\n  --help        Show this message and exit.\n' = help_text(<click.testing.CliRunner object at 0xe83b2b5bef60>, '', prefix='WEATHER')
+
+tests/test_zz_hidden_show_envvar.py:86: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_zz_hidden_show_envvar.py::test_hidden_help_empty_envvar_uses_auto_prefix[envvar1]
+FAILED tests/test_zz_hidden_show_envvar.py::test_hidden_help_empty_envvar_uses_auto_prefix[envvar2]
+FAILED tests/test_zz_hidden_show_envvar.py::test_hidden_help_empty_envvar_uses_auto_prefix[]
+3 failed, 30 passed in 0.10s
+VERDICT FAIL hidden-tests

@@ -1,0 +1,44 @@
+== layer 1: patch applies
+== layer 2: test isolation (candidate changes to tests are discarded)
+discarding candidate changes to test files:
+  tests/test_show_envvar_sequence.py
+== layer 3: build
+== layer 4: visible tests
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+____________________ test_missing_option_names_every_envvar ____________________
+
+runner = <click.testing.CliRunner object at 0xf01957ed06b0>
+
+    def test_missing_option_names_every_envvar(runner):
+        option = click.Option(
+            ["--units"], envvar=["WEATHER_UNITS", "UNITS"], show_envvar=True, required=True
+        )
+        result = runner.invoke(click.Command("cli", params=[option]))
+        assert result.exit_code == 2
+>       assert (
+            "Error: Missing option '--units' (env var: 'WEATHER_UNITS', 'UNITS')."
+            in result.output
+        )
+E       assert "Error: Missing option '--units' (env var: 'WEATHER_UNITS', 'UNITS')." in "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Missing option '--units' (env var: '['WEATHER_UNITS', 'UNITS']').\n"
+E        +  where "Usage: cli [OPTIONS]\nTry 'cli --help' for help.\n\nError: Missing option '--units' (env var: '['WEATHER_UNITS', 'UNITS']').\n" = <Result SystemExit(2)>.output
+
+tests/test_show_envvar_sequence.py:10: AssertionError
+_________________ test_empty_string_envvar_shows_no_help_extra _________________
+
+runner = <click.testing.CliRunner object at 0xf01957c6f7d0>
+
+    def test_empty_string_envvar_shows_no_help_extra(runner):
+        option = click.Option(["--units"], envvar="", show_envvar=True)
+        result = runner.invoke(click.Command("cli", params=[option]), ["--help"])
+        assert not result.exception
+>       assert "  --units TEXT\n" in result.output
+E       AssertionError: assert '  --units TEXT\n' in 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT  [env var: ]\n  --help        Show this message and exit.\n'
+E        +  where 'Usage: cli [OPTIONS]\n\nOptions:\n  --units TEXT  [env var: ]\n  --help        Show this message and exit.\n' = <Result okay>.output
+
+tests/test_show_envvar_sequence.py:20: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_show_envvar_sequence.py::test_missing_option_names_every_envvar
+FAILED tests/test_show_envvar_sequence.py::test_empty_string_envvar_shows_no_help_extra
+2 failed in 0.02s
+VERDICT FAIL visible-tests

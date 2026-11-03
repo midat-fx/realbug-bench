@@ -1,0 +1,13 @@
+solution	run	verdict
+evil-autoenv-only-for-none	1	FAIL hidden-tests
+evil-autoenv-only-for-none	2	FAIL hidden-tests
+evil-empty-still-shown-in-error	1	FAIL hidden-tests
+evil-empty-still-shown-in-error	2	FAIL hidden-tests
+evil-list-only	1	FAIL hidden-tests
+evil-list-only	2	FAIL hidden-tests
+evil-tests-expect-old-output	1	FAIL visible-tests
+evil-tests-expect-old-output	2	FAIL visible-tests
+ok-envvar-names-helper	1	PASS all-layers
+ok-envvar-names-helper	2	PASS all-layers
+reference	1	PASS all-layers
+reference	2	PASS all-layers

@@ -1,0 +1,57 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 9cf05a9..7c3ec8a 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3268,10 +3268,19 @@ class Option(Parameter):
+             value = value()
+         return value
+ 
++    def _envvar_names(self) -> tuple[str, ...]:
++        """The option's own environment variables as a tuple, empty when it has none."""
++        if not self.envvar:
++            return ()
++        if isinstance(self.envvar, str):
++            return (self.envvar,)
++        return tuple(str(name) for name in self.envvar)
++
+     def get_error_hint(self, ctx: Context | None) -> str:
+         result = super().get_error_hint(ctx)
+-        if self.show_envvar and self.envvar is not None:
+-            result += f" (env var: '{self.envvar}')"
++        names = self._envvar_names()
++        if self.show_envvar and names:
++            result += " (env var: {})".format(", ".join(f"'{n}'" for n in names))
+         return result
+ 
+     def _parse_decls(
+@@ -3439,19 +3448,18 @@ class Option(Parameter):
+         if self.show_envvar:
+             envvar = self.envvar
+ 
+-            if envvar is None:
+-                if (
+-                    self.allow_from_autoenv
+-                    and ctx.auto_envvar_prefix is not None
+-                    and self.name
+-                ):
+-                    envvar = f"{ctx.auto_envvar_prefix}_{self.name.upper()}"
++            names = self._envvar_names()
+ 
+-            if envvar is not None:
+-                if isinstance(envvar, str):
+-                    extra["envvars"] = (envvar,)
+-                else:
+-                    extra["envvars"] = tuple(str(d) for d in envvar)
++            if (
++                not names
++                and self.allow_from_autoenv
++                and ctx.auto_envvar_prefix is not None
++                and self.name
++            ):
++                names = (f"{ctx.auto_envvar_prefix}_{self.name.upper()}",)
++
++            if names:
++                extra["envvars"] = names
+ 
+         # Temporarily enable resilient parsing to avoid type casting
+         # failing for the default. Might be possible to extend this to

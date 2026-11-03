@@ -30,6 +30,7 @@ jobs:
           - gaos-scenario-races
           - sqlparse-dotted-real-name
           - tomlkit-crlf-error-position
+          - click-show-envvar-sequence
           - path-to-regexp-stringify-empty-text
           - yaml-flow-key-after-blank-line
           - immer-revoked-mapset-reads

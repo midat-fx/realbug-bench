@@ -1,0 +1,1 @@
+{"task":"click-show-envvar-sequence","agent":"claude","model":"claude-haiku-5-5","started":"20261103T135153Z","seconds":106,"agent_exit":0,"verdict":"PASS all-layers","turns":18,"cost_usd":1.0279565000000002,"is_error":false,"output_tokens":7471,"cache_read_tokens":606823}

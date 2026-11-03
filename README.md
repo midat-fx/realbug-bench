@@ -27,6 +27,7 @@ Why it is built this way, including what was tried and dropped: [docs/DESIGN.md]
 | [`gaos-scenario-races`](tasks/gaos-scenario-races/issue.md) | [Trendyol/gaos@771d620](https://github.com/Trendyol/gaos/tree/771d620499118e64e048de918103bcc404bda74f): data races on rate/limit counters and on `direct` scenario switching, not fixed upstream | Go, concurrency | 2 | 4 |
 | [`sqlparse-dotted-real-name`](tasks/sqlparse-dotted-real-name/issue.md) | [andialbrecht/sqlparse@f66d12c](https://github.com/andialbrecht/sqlparse/commit/f66d12c245412f28c58f045b646eb53c0e691b8b): `get_real_name()` returns the schema for `db.schema.table` | Python, API behaviour | 3 | 4 |
 | [`tomlkit-crlf-error-position`](tasks/tomlkit-crlf-error-position/issue.md) | [python-poetry/tomlkit@c07c0c1](https://github.com/python-poetry/tomlkit/commit/c07c0c15c49a893bb8a4c9f63401822d31e08942): parse errors in CRLF files point at the wrong line and column | Python, error reporting | 2 | 4 |
+| [`click-show-envvar-sequence`](tasks/click-show-envvar-sequence/issue.md) | [pallets/click@c53d373](https://github.com/pallets/click/commit/c53d3732b98c764932e146c007146ad402acb229): with `show_envvar`, errors print the repr of an `envvar` list, and an empty `envvar` shows `[env var: ]` | Python, CLI error and help text | 2 | 4 |
 | [`path-to-regexp-stringify-empty-text`](tasks/path-to-regexp-stringify-empty-text/issue.md) | [pillarjs/path-to-regexp@7dd6f8f](https://github.com/pillarjs/path-to-regexp/commit/7dd6f8f7bd63ae8bffca0968144508228dc61729): `stringify()` merges a param name with the text after an empty text token | TypeScript, round-trip / escaping | 2 | 4 |
 | [`yaml-flow-key-after-blank-line`](tasks/yaml-flow-key-after-blank-line/issue.md) | [eemeli/yaml@55e2079](https://github.com/eemeli/yaml/commit/55e2079173b7389ef24e97592890c40f602078ad): a flow-collection map key after a blank line or comment fails to parse | TypeScript, parser state | 2 | 4 |
 | [`immer-revoked-mapset-reads`](tasks/immer-revoked-mapset-reads/issue.md) | [immerjs/immer@8848a5b](https://github.com/immerjs/immer/commit/8848a5b16938e5681a890d73de7bda24b5080498): revoked Map/Set drafts still answer `has`, `size`, `keys`, `forEach` | TypeScript, API contract | 2 | 4 |
@@ -148,6 +149,17 @@ tasks was graded 3 times locally, every solution of the Python and TypeScript ta
 | `evil-global-line-ending-width` | FAIL hidden-tests | two characters per line break if the file contains any `\r\n`: wrong for mixed endings |
 | `evil-drop-crlf-test-case` | FAIL visible-tests | removes the CRLF case from the visible test |
 
+**click-show-envvar-sequence**
+
+| Solution | Verdict | What it does |
+|---|---|---|
+| `reference` | PASS | upstream fix: the error hint joins each quoted variable of a sequence; help and hint treat an empty `envvar` like `None` |
+| `ok-envvar-names-helper` | PASS | different design: one `_envvar_names()` helper that returns a tuple, empty when there are no variables, used by both the hint and the help |
+| `evil-list-only` | FAIL hidden-tests | joins the names only for a `list`; a tuple still prints its repr |
+| `evil-empty-still-shown-in-error` | FAIL hidden-tests | fixes the sequence and the help, but keeps `is not None` in the hint: `[]` and `""` still print `(env var: …)` |
+| `evil-autoenv-only-for-none` | FAIL hidden-tests | hides an empty `envvar` in the help, but falls back to the automatic `PREFIX_NAME` variable only for `None`, unlike the runtime lookup |
+| `evil-tests-expect-old-output` | FAIL visible-tests | rewrites the visible tests to expect the current output |
+
 **path-to-regexp-stringify-empty-text**
 
 | Solution | Verdict | What it does |
@@ -191,7 +203,8 @@ repository (hidden tests, solutions); none were found.
 ### Claude Code
 
 Claude Code 2.1.220 (`claude -p`, `--permission-mode bypassPermissions`, project settings only, no
-MCP servers), three runs per task and model, 54 runs on 2026-11-01. Each cell: passing runs, then
+MCP servers), three runs per task and model: 54 runs on 2026-11-01, and 6 on 2026-11-03 for
+`click-show-envvar-sequence`, added later. Each cell: passing runs, then
 the median wall-clock time and median cost of the three.
 
 | Task | Haiku 5.5 | Sonnet 5.5 |
@@ -202,10 +215,11 @@ the median wall-clock time and median cost of the three.
 | `gaos-scenario-races` | 3/3 · 133 s · $1.52 | 3/3 · 43 s · $0.24 |
 | `sqlparse-dotted-real-name` | 3/3 · 62 s · $0.85 | 3/3 · 41 s · $0.30 |
 | `tomlkit-crlf-error-position` | 3/3 · 113 s · $1.22 | 3/3 · 46 s · $0.21 |
+| `click-show-envvar-sequence` | 3/3 · 55 s · $0.73 | 3/3 · 60 s · $0.27 |
 | `path-to-regexp-stringify-empty-text` | 3/3 · 67 s · $0.69 | 3/3 · 29 s · $0.18 |
 | `yaml-flow-key-after-blank-line` | 3/3 · 269 s · $2.14 | 3/3 · 68 s · $0.34 |
 | `immer-revoked-mapset-reads` | 3/3 · 155 s · $1.20 | 3/3 · 57 s · $0.31 |
-| **Total** | **26/27** · 65 min · $36.95 | **25/27** · 26 min · $7.52 |
+| **Total** | **29/30** · 69 min · $39.38 | **28/30** · 29 min · $8.38 |
 
 Generated by `./bench summary` from `results/agents/*/*/result.json`; `make selftest`, and so CI, fails
 if this table and the committed runs disagree.
@@ -218,6 +232,9 @@ if this table and the committed runs disagree.
   `errors.Is(err, consumeErr)`; the issue only says "the callback returns an error and the message
   follows the normal retry flow". This is a gap in the issue text rather than a wrong fix, and is
   left as measured: the verdicts are those of the verifier the runs were graded with.
+- `click-show-envvar-sequence` passed 6/6, so its hidden checks (tuples, empty `envvar` in both
+  the error and the help, the automatic variable) did not separate the two models. It is the one
+  task where Haiku's median time (55 s) is not above Sonnet's (60 s).
 - Eight runs also added test cases to existing test files; layer 2 discarded them, and all eight
   passed on the original tests. No run hit the 30-minute cap.
 - Cost is the `total_cost_usd` Claude Code reports (an API-price equivalent; the runs used a

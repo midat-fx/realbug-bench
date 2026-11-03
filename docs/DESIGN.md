@@ -103,7 +103,10 @@ parse/compile/match/stringify case) still runs.
   install --frozen-lockfile` for immer). path-to-regexp has no lockfile, so the image resolves
   dependencies with `npm install --before=<base commit date>`: the same versions on every build.
   Python tasks pin pytest (and PyYAML for tomlkit's suite); the libraries have no runtime
-  dependencies.
+  dependencies. click is installed editable (`pip install -e .`, at build time, with the network),
+  because its package lives under `src/`: the tests must import the candidate's code, not a copy
+  in site-packages. Its image also has `less`, which 24 pager tests of click's suite call; without it
+  the suite fails at the base commit.
 - Grading runs with `--network none`, so a build that passed once grades the same way offline.
 
 ## Evil solutions
@@ -112,13 +115,17 @@ Each evil solution is a shortcut an agent plausibly takes, aimed at one hidden c
 
 - **Overfitting to the visible test**: only the paths the visible test calls (immer), only flow
   sequences because the visible example is `[3]: 4` (yaml), only three-part names (sqlparse), only one
-  empty token (path-to-regexp).
+  empty token (path-to-regexp), only a `list` because the visible example is one (click).
 - **A symptom fix in the wrong place**: silencing the composer error instead of fixing the parser
   state (yaml). It parses, but comments move to the end of the map.
 - **A fix with a side effect**: normalising line endings before parsing (tomlkit). Positions are
   right, but the document no longer round-trips byte for byte, which is tomlkit's whole point.
 - **Over-correction**: quoting a name before every empty token (path-to-regexp), changing
   `get_parent_name` along with `get_real_name` (sqlparse).
+- **Half of a two-place fix**: click shows an option's variables in two places, the error hint and
+  the help. One evil fixes the help but leaves the empty-`envvar` case in the hint; another hides an
+  empty `envvar` in the help but stops falling back to the automatic variable that click still
+  reads for it.
 - **Wrong error**: throwing a custom error instead of the library's revoked-draft error (immer).
 - **Editing or removing the tests.**
 
@@ -139,7 +146,8 @@ during development, the hidden tests were extended rather than the evil dropped:
   solutions). A sanitized copy (workspace and home paths replaced) is kept in `results/` for audit.
 - **A wall-clock cap** (30 minutes) so a stuck run is recorded as such instead of hanging the sweep.
 - **Three runs per task and model.** One run says little about an agent that samples; three show
-  whether a pass is repeatable and stay within the budget of 60 runs (9 tasks x 2 models x 3 = 54).
+  whether a pass is repeatable and stay within the budget of 60 runs (10 tasks x 2 models x 3 = 60; the tenth task's six were
+  run two days after the first 54).
 - **Cost** is the `total_cost_usd` Claude Code reports in its final event. Runs used a subscription,
   so it is an API-price equivalent, not money spent.
 - **Verdicts are not revised after the fact.** The first sweep showed that the

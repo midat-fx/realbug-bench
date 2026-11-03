@@ -1,0 +1,29 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index 9cf05a9..ed3ded2 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3270,8 +3270,12 @@ class Option(Parameter):
+ 
+     def get_error_hint(self, ctx: Context | None) -> str:
+         result = super().get_error_hint(ctx)
+-        if self.show_envvar and self.envvar is not None:
+-            result += f" (env var: '{self.envvar}')"
++        if self.show_envvar and self.envvar:
++            if isinstance(self.envvar, str):
++                names: cabc.Iterable[str] = (self.envvar,)
++            else:
++                names = self.envvar
++            result += " (env var: {})".format(", ".join(f"'{n}'" for n in names))
+         return result
+ 
+     def _parse_decls(
+@@ -3439,7 +3443,8 @@ class Option(Parameter):
+         if self.show_envvar:
+             envvar = self.envvar
+ 
+-            if envvar is None:
++            if not envvar:
++                envvar = None
+                 if (
+                     self.allow_from_autoenv
+                     and ctx.auto_envvar_prefix is not None

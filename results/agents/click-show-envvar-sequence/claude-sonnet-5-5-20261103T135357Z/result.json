@@ -1,0 +1,1 @@
+{"task":"click-show-envvar-sequence","agent":"claude","model":"claude-sonnet-5-5","started":"20261103T135357Z","seconds":33,"agent_exit":0,"verdict":"PASS all-layers","turns":7,"cost_usd":0.19084410000000002,"is_error":false,"output_tokens":2219,"cache_read_tokens":260597}

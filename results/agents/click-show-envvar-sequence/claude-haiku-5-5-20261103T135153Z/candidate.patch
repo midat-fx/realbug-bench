@@ -1,0 +1,50 @@
+diff --git a/CHANGES.md b/CHANGES.md
+index 7f1b485..2767180 100644
+--- a/CHANGES.md
++++ b/CHANGES.md
+@@ -2,6 +2,10 @@
+ 
+ Unreleased
+ 
++- With `show_envvar=True`, an option's error message and help name every variable of a
++  sequence `envvar` as `'A', 'B'`, instead of printing its repr. An empty `envvar` is
++  treated like `None`: no `env var` hint is shown, and the automatic variable from
++  `auto_envvar_prefix` is used.
+ - Fix `copy.deepcopy()` and `pickle` on a `Parameter`, `Option` or `Command`. {pr}`3805`
+ - A `KeyboardInterrupt` arriving while `Command.main()` reports an abort or an error,
+   or while it exits, no longer escapes as an unhandled traceback. The command still
+diff --git a/src/click/core.py b/src/click/core.py
+index 9cf05a9..59b8c18 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3270,8 +3270,10 @@ class Option(Parameter):
+ 
+     def get_error_hint(self, ctx: Context | None) -> str:
+         result = super().get_error_hint(ctx)
+-        if self.show_envvar and self.envvar is not None:
+-            result += f" (env var: '{self.envvar}')"
++        if self.show_envvar and self.envvar:
++            envvars = (self.envvar,) if isinstance(self.envvar, str) else self.envvar
++            names = ", ".join(f"'{v}'" for v in envvars)
++            result += f" (env var: {names})"
+         return result
+ 
+     def _parse_decls(
+@@ -3439,7 +3441,7 @@ class Option(Parameter):
+         if self.show_envvar:
+             envvar = self.envvar
+ 
+-            if envvar is None:
++            if not envvar:
+                 if (
+                     self.allow_from_autoenv
+                     and ctx.auto_envvar_prefix is not None
+@@ -3447,7 +3449,7 @@ class Option(Parameter):
+                 ):
+                     envvar = f"{ctx.auto_envvar_prefix}_{self.name.upper()}"
+ 
+-            if envvar is not None:
++            if envvar:
+                 if isinstance(envvar, str):
+                     extra["envvars"] = (envvar,)
+                 else:

@@ -257,6 +257,69 @@ if this table and the committed runs disagree.
 Both passing patches were graded three times with the same verdict. Run 2026-10-24. The other
 tasks have no Codex runs.
 
+## Running agents
+
+```bash
+CLAUDE_MODEL=claude-sonnet-5-5 ./bench agent sqlparse-dotted-real-name claude
+```
+
+`./bench agent <task> <agent>` clones the upstream repository at the base commit into a fresh
+workspace, adds the visible tests, starts the agent there with the issue as its prompt, then grades
+the diff of everything it changed with the same verifier as the solutions. The workspace is
+`$AGENT_WORKDIR` (default `$TMPDIR`, else `/tmp`)`/realbug-<run>-<task>`, outside this repository, and is
+removed after grading unless `KEEP_WORKSPACE=1`.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `CLAUDE_MODEL` | `claude-opus-5-5` | `--model` for `claude -p` |
+| `CODEX_MODEL` | Codex's own default | `-m` for `codex exec` |
+| `CODEX_BIN` | `codex` | the Codex CLI binary |
+| `AGENT_TIMEOUT` | `1800` | wall-clock cap in seconds, a perl `alarm`; a run that hits it exits 142 |
+| `KEEP_WORKSPACE` | unset | `1` keeps the workspace for inspection |
+| `AGENT_WORKDIR` | `$TMPDIR`, else `/tmp` | where workspaces are created |
+
+Claude Code runs with `--permission-mode bypassPermissions --setting-sources project
+--strict-mcp-config --mcp-config '{"mcpServers":{}}' --disable-slash-commands
+--no-session-persistence`, so it sees the workspace and the issue, and none of my own settings,
+hooks, MCP servers or skills. stdin is `/dev/null`; without that `claude -p` waits for input.
+
+Each run gets its own directory, `results/agents/<task>/<agent>[-<model>]-<UTC time>/`, so runs of the
+same task can go in parallel. I run at most two at a time:
+
+```bash
+printf '%s\n' claude-haiku-5-5 claude-sonnet-5-5 claude-haiku-5-5 claude-sonnet-5-5 claude-haiku-5-5 claude-sonnet-5-5 \
+  | xargs -P2 -I{} sh -c 'CLAUDE_MODEL={} ./bench agent <task> claude'
+```
+
+What a run leaves behind:
+
+- `candidate.patch`, the agent's diff, and `grade.log`, the verifier's output.
+- `result.json`: `task`, `agent`, `model`, `started`, `seconds` (wall clock of the agent alone,
+  grading excluded), `agent_exit` (142 on timeout), `verdict`. For Claude Code also `turns`,
+  `cost_usd`, `is_error`, `output_tokens` and `cache_read_tokens`, taken from the final event of its
+  stream-json output. `cost_usd` is Claude Code's `total_cost_usd`: the API-price equivalent of the
+  tokens used, not what a subscription run cost.
+- `transcript.jsonl.gz`, written through `./bench sanitize`: the workspace path, in every spelling
+  tools print it (with the macOS `/private` prefix, with the doubled slash of a `TMPDIR` that ends in
+  `/`), becomes `$WORKSPACE`, the home directory becomes `$HOME`, and account rate-limit events are
+  dropped. The raw `transcript.jsonl` and `stderr.log` stay local (`.gitignore`). The two Codex runs
+  of 2026-10-24 predate the sanitizer and have no transcript in the repository.
+
+Before sanitizing, the raw transcript is searched for `realbug-bench/tasks`. A match means the
+agent read this repository, hidden tests or solutions included, and the verdict gets
+` (CONTAMINATED)` appended. `./bench summary` counts only a plain `PASS all-layers`, so a
+contaminated pass is a failure in the README table. None of the 62 verdicts in `results/agents/`
+carries the mark.
+
+To read the results: `./bench report` prints one row per run (the source of
+[results/agent-runs.md](results/agent-runs.md)), and `./bench summary` prints the task × model table
+above. The slowest of the 60 Claude Code runs took 357 s, well inside the cap.
+
+I don't revise verdicts after seeing results. When the first sweep showed that the
+`konsumer-batch-retry-prebatch` issue leaves one case open, the issue and the hidden test stayed as
+they were, and so did the three failing verdicts. A clarified issue would be a new task with its
+own runs, reported separately ([docs/DESIGN.md](docs/DESIGN.md), "Agent runs").
+
 ## Layout
 
 ```

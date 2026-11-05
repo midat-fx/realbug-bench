@@ -302,7 +302,10 @@ What a run leaves behind:
 - `transcript.jsonl.gz`, written through `./bench sanitize`: the workspace path, in every spelling
   tools print it (with the macOS `/private` prefix, with the doubled slash of a `TMPDIR` that ends in
   `/`), becomes `$WORKSPACE`, the home directory becomes `$HOME`, and account rate-limit events are
-  dropped. The raw `transcript.jsonl` and `stderr.log` stay local (`.gitignore`). The two Codex runs
+  dropped. Claude Code also names directories by a path with `/` and `.` turned into `-` (its
+  per-project folders under `~/.claude/projects`, scratchpads): those names become `$PROJECT`, and a
+  home left in that dashed spelling becomes `-$HOME`. `./bench scan` fails on either form, inside
+  `.gz` files too. The raw `transcript.jsonl` and `stderr.log` stay local (`.gitignore`). The two Codex runs
   of 2026-10-24 predate the sanitizer and have no transcript in the repository.
 
 Before sanitizing, the raw transcript is searched for `realbug-bench/tasks`. A match means the

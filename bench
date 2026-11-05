@@ -176,12 +176,15 @@ $(cat "$dir/issue.md")"
 
 # Shareable transcript (stdin to stdout): the workspace path in every spelling tools print it
 # (macOS /private prefix, the doubled slash of a TMPDIR that ends in "/") and $HOME are replaced,
-# and account rate-limit events are dropped ("even[t]" keeps ./bench scan from matching this line).
+# and account rate-limit events are dropped ("even[t]", "project[s]" keep ./bench scan from matching this file).
 sanitize() {
 	local ere='s/[]\.*^$+?(){}|[]/\\&/g' ws home
 	ws=$(printf %s "${1%/}" | tr -s / | sed -E "$ere; s#/#/+#g")
 	home=$(printf %s "$HOME" | sed -E "$ere")
-	sed -E -e '/"type":"rate_limit_even[t]"/d' -e "s#(/private)?$ws#\$WORKSPACE#g; s#$home#\$HOME#g"
+	# then Claude Code's per-project directories (paths with "/" and "." turned into "-", e.g.
+	# under ~/.claude/projects or a scratchpad) and any home left in that dashed spelling
+	sed -E -e '/"type":"rate_limit_even[t]"/d' -e "s#(/private)?$ws#\$WORKSPACE#g; s#$home#\$HOME#g" \
+		-e 's#(\.claude/project[s]/)[^"/\\ ]+#\1$PROJECT#g; s#-(Users|home)-[A-Za-z0-9_]+#-$HOME#g'
 }
 
 # One row per agent run, oldest first.
@@ -225,7 +228,7 @@ summary() {
 # no co-author or generator lines. A GitHub web merge (committer noreply@github.com) fails it.
 scan() {
 	# "even[t]": the patterns must not match this file itself
-	local pat='/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"type":"rate_limit_even[t]"'
+	local pat='/Users/[A-Za-z]|/home/[a-z][a-z0-9_-]*/|gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"type":"rate_limit_even[t]"|-Users-[A-Za-z]|-home-[a-z]|\.claude/project[s]/[^$]'
 	[ -z "${SCAN_EXTRA:-}" ] || pat="$pat|$SCAN_EXTRA"
 	local bad=0 f
 	while IFS= read -r -d '' f; do
